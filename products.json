@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1",
+    "name": "Quencher H2.0 40oz",
+    "brand": "Stanley",
+    "price": 1990,
+    "image": "https://tse3.mm.bing.net/th/id/OIP.k33LBGHo3yRvsthyNIfQNQHaHa?r=0&rs=1&pid=ImgDetMain&o=7&rm=3"
+  },
+  {
+    "id": "2",
+    "name": "Stainless Steel Tumbler 900ml",
+    "brand": "TYESO",
+    "price": 499,
+    "image": "https://www.bartan.com.au/img/products/6601-2.jpg"
+  },
+  {
+    "id": "3",
+    "name": "Metro Tumbler 600ml",
+    "brand": "LocknLock",
+    "price": 690,
+    "image": "https://down-my.img.susercontent.com/file/sg-11134207-7rep1-m8377sqb6zdu2a"
+  }
+]
