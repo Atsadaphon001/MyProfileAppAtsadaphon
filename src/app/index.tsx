@@ -28,7 +28,7 @@ const API_BASE_URL = "http://119.59.102.161:3101/api/products";
 const API_AUTH_URL = "http://119.59.102.161:3101/api";
 
 const COLORS = {
-  primary: "#008eb1",
+  primary: "#00a8b1",
   primaryDark: "#0E7490",
   primaryLight: "#67E8F9",
   accent: "#06B6D4",
