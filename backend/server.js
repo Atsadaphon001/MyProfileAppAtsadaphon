@@ -7,6 +7,7 @@ require("dotenv").config({
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
+const bcrypt = require("bcryptjs"); // เพิ่ม bcryptjs เพื่อความปลอดภัยของรหัสผ่าน
 
 const app = express();
 
@@ -39,11 +40,159 @@ app.get("/", (req, res) => {
 });
 
 // ===============================
-// GET PRODUCTS
+// REGISTER API (สมัครสมาชิก)
+// ===============================
+app.post("/api/register", async (req, res) => {
+  try {
+    const { username, email, password, name } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "กรุณากรอก Username และ Password",
+      });
+    }
+
+    const cleanUsername = String(username).trim();
+    const cleanEmail = email ? String(email).trim() : null;
+
+    // 1. ตรวจสอบว่า Username หรือ Email เคยสมัครไว้แล้วหรือไม่
+    let checkSql = "SELECT id, username, email FROM users WHERE username = ?";
+    const checkParams = [cleanUsername];
+
+    if (cleanEmail) {
+      checkSql += " OR email = ?";
+      checkParams.push(cleanEmail);
+    }
+
+    const [existingUsers] = await pool.query(checkSql, checkParams);
+
+    if (existingUsers.length > 0) {
+      const existingUser = existingUsers.find(
+        (user) => user.username.toLowerCase() === cleanUsername.toLowerCase()
+      );
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "Username นี้ถูกใช้งานไปแล้ว",
+        });
+      }
+
+      if (cleanEmail) {
+        const existingEmail = existingUsers.find(
+          (user) => user.email && user.email.toLowerCase() === cleanEmail.toLowerCase()
+        );
+        if (existingEmail) {
+          return res.status(400).json({
+            success: false,
+            message: "Email นี้ถูกใช้งานไปแล้ว",
+          });
+        }
+      }
+    }
+
+    // 2. เข้ารหัส Password ด้วย bcrypt
+    const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
+
+    // 3. บันทึกผู้ใช้ใหม่ลงใน Database
+    const [result] = await pool.query(
+      "INSERT INTO users (username, email, password, name, role) VALUES (?, ?, ?, ?, 'user')",
+      [
+        cleanUsername,
+        cleanEmail,
+        hashedPassword,
+        name ? String(name).trim() : cleanUsername,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "สมัครสมาชิกสำเร็จ",
+      userId: result.insertId,
+    });
+  } catch (err) {
+    console.error("REGISTER ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: "Database Error",
+      error: err.message,
+    });
+  }
+});
+
+// ===============================
+// LOGIN API (เข้าสู่ระบบ)
+// ===============================
+app.post("/api/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "กรุณากรอก Username และ Password",
+      });
+    }
+
+    // ดึงข้อมูล User จากตาราง users
+    const [users] = await pool.query(
+      "SELECT * FROM users WHERE username = ?",
+      [String(username).trim()]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Username หรือ Password ไม่ถูกต้อง",
+      });
+    }
+
+    const user = users[0];
+
+    // ตรวจสอบ Password (รองรับทั้ง bcrypt และ plaintext สำหรับข้อมูลเก่า)
+    let isMatch = false;
+    if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
+      isMatch = await bcrypt.compare(String(password).trim(), user.password);
+    } else {
+      isMatch = user.password === String(password).trim();
+    }
+
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Username หรือ Password ไม่ถูกต้อง",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "เข้าสู่ระบบสำเร็จ",
+      user: {
+        id: user.id || user.user_id,
+        username: user.username,
+        email: user.email || "",
+        name: user.name || user.username,
+        role: user.role || "user",
+      },
+    });
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: "Database Error",
+      error: err.message,
+    });
+  }
+});
+
+// ===============================
+// GET PRODUCTS (รองรับการค้นหาผ่าน ?q=)
 // ===============================
 app.get("/api/products", async (req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const searchQuery = req.query.q ? String(req.query.q).trim() : "";
+    
+    let sql = `
       SELECT
         id,
         product_name,
@@ -60,8 +209,19 @@ app.get("/api/products", async (req, res) => {
         COALESCE(status,'Available') AS status,
         created_at
       FROM products
-      ORDER BY id ASC
-    `);
+    `;
+
+    const queryParams = [];
+
+    if (searchQuery) {
+      sql += ` WHERE product_name LIKE ? OR brand LIKE ? OR category LIKE ? OR productCode LIKE ?`;
+      const term = `%${searchQuery}%`;
+      queryParams.push(term, term, term, term);
+    }
+
+    sql += ` ORDER BY id ASC`;
+
+    const [rows] = await pool.query(sql, queryParams);
 
     res.json(rows);
   } catch (err) {
@@ -308,13 +468,9 @@ const PORT = Number(process.env.PORT) || 3101;
 (async () => {
   try {
     const conn = await pool.getConnection();
-
     console.log("✅ MySQL Connected");
 
-    const [rows] = await conn.query(
-      "SELECT DATABASE() AS db"
-    );
-
+    const [rows] = await conn.query("SELECT DATABASE() AS db");
     console.log("Current Database:", rows[0].db);
 
     conn.release();

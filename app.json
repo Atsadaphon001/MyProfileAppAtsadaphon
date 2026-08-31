@@ -1,5 +1,5 @@
 {
-"expo": {
+  "expo": {
     "name": "MyProfileAppAtsadaphon",
     "slug": "MyProfileAppAtsadaphon",
     "version": "1.0.0",
@@ -21,7 +21,8 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "bundler": "metro",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
