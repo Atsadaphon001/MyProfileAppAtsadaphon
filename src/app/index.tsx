@@ -1,6 +1,7 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PolarBearMark } from "../components/polar-bear-mark";
 import { API_AUTH_URL, API_BASE_URL } from "../constants/api";
 import { addToCart, getCartCount, getProductStock, getSession, setSession } from "../constants/store";
 
@@ -355,6 +356,8 @@ const demoProducts: Product[] = [
   },
 ];
 
+const LOCAL_ACCOUNTS_KEY = "chillcup-local-accounts";
+
 export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const isMobile = width < 600;
@@ -671,6 +674,35 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error("Auth error:", error);
+      if (typeof sessionStorage !== "undefined") {
+        const savedAccounts = sessionStorage.getItem(LOCAL_ACCOUNTS_KEY);
+        const accounts: Array<{ username: string; email: string; password: string }> = savedAccounts
+          ? JSON.parse(savedAccounts)
+          : [];
+        const username = authUsername.trim().toLowerCase();
+        const localAccount = accounts.find((account) => account.username === username);
+
+        if (isLoginMode && localAccount && localAccount.password === authPassword) {
+          const localUser: User = { id: Date.now(), username: localAccount.username, email: localAccount.email, name: localAccount.username, role: "user" };
+          setSession(localUser, "local-session");
+          setCurrentUser(localUser);
+          setAuthModalVisible(false);
+          resetAuthForm();
+          showAlert("สำเร็จ", `เข้าสู่ระบบเรียบร้อย ยินดีต้อนรับ ${localUser.username}`);
+          return;
+        }
+
+        if (!isLoginMode && !localAccount) {
+          accounts.push({ username, email: authEmail.trim(), password: authPassword });
+          sessionStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+          showAlert("สมัครสมาชิกสำเร็จ", "สร้างบัญชีในโหมดออฟไลน์แล้ว สามารถเข้าสู่ระบบได้ทันที");
+          setIsLoginMode(true);
+          setAuthEmail("");
+          setAuthPassword("");
+          setAuthConfirmPassword("");
+          return;
+        }
+      }
       showAlert(
         "เชื่อมต่อไม่สำเร็จ",
         "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบการเชื่อมต่อเครือข่าย"
@@ -1082,9 +1114,7 @@ export default function HomeScreen() {
         </Pressable>
 
         <View style={styles.brandRow}>
-          <View style={styles.brandIconWrap}>
-            <Ionicons name="snow" size={18} color="#fff" />
-          </View>
+          <PolarBearMark size="small" />
           <View>
             <Text style={styles.headerTitle}>ChillCup</Text>
             <Text style={styles.headerSubtitle}>แก้วเก็บความเย็น</Text>
@@ -1120,6 +1150,7 @@ export default function HomeScreen() {
         opacity: carouselVisibility,
         transform: [{ translateY: carouselVisibility.interpolate({ inputRange: [0, 1], outputRange: [-28, 0] }) }],
       }]}>
+        <View style={styles.heroBearMark}><PolarBearMark size="small" /></View>
         <Animated.View style={[styles.heroSlideLayer, {
           opacity: carouselSlideMotion,
           transform: [{ scale: carouselSlideMotion.interpolate({ inputRange: [0, 1], outputRange: [1.035, 1] }) }],
@@ -1779,6 +1810,13 @@ const styles = StyleSheet.create({
   heroSlideLayer: {
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
+  },
+  heroBearMark: {
+    position: "absolute",
+    top: 16,
+    right: 18,
+    zIndex: 4,
+    opacity: 0.96,
   },
   heroShade: {
     ...StyleSheet.absoluteFill,
