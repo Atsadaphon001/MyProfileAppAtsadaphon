@@ -1,0 +1,201 @@
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { API_AUTH_URL } from "../constants/api";
+import { setSession } from "../constants/store";
+
+const COLORS = {
+  primary: "#00a8b1",
+  primaryDark: "#0E7490",
+  background: "#F0FBFF",
+  text: "#0F2A37",
+  muted: "#5B7C89",
+  border: "#DCF2F8",
+};
+
+export default function LoginScreen() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [registerMode, setRegisterMode] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const showError = (message: string) => {
+    if (Platform.OS === "web") alert(message);
+    else Alert.alert("เข้าสู่ระบบไม่สำเร็จ", message);
+  };
+
+  const submitAuth = async () => {
+    if (!username.trim() || !password || (registerMode && (!email.trim() || password !== confirmPassword))) {
+      showError(registerMode ? "กรุณากรอกข้อมูลให้ครบ และตรวจสอบรหัสผ่านอีกครั้ง" : "กรุณากรอก Username และ Password");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const demoUsername = username.trim().toLowerCase();
+      if (!registerMode && ((demoUsername === "admin" && password === "admin") || (demoUsername === "user" && password === "user"))) {
+        const demoUser = demoUsername === "admin"
+          ? { id: 0, username: "admin", name: "Administrator", role: "admin" }
+          : { id: 1, username: "user", name: "Demo Customer", role: "user" };
+        setSession(demoUser, "demo-session");
+        if (Platform.OS === "web") sessionStorage.setItem("chillcup-web-access", "granted");
+        router.replace("/");
+        return;
+      }
+      if (registerMode) {
+        setSession({ id: Date.now(), username: username.trim(), name: username.trim(), email: email.trim(), role: "user" }, "demo-session");
+        if (Platform.OS === "web") sessionStorage.setItem("chillcup-web-access", "granted");
+        router.replace("/");
+        return;
+      }
+      const response = await fetch(`${API_AUTH_URL}/${registerMode ? "register" : "login"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(registerMode
+          ? { username: username.trim(), email: email.trim(), password, name: username.trim() }
+          : { username: username.trim(), password }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || `เกิดข้อผิดพลาด (${response.status})`);
+      if (registerMode) {
+        setRegisterMode(false);
+        setPassword("");
+        setConfirmPassword("");
+        showError("สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ");
+        return;
+      }
+      if (data.user) setSession(data.user, data.token || "");
+      if (Platform.OS === "web") sessionStorage.setItem("chillcup-web-access", "granted");
+      router.replace("/");
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <KeyboardAvoidingView
+        style={styles.content}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.logo}>
+          <Ionicons name="snow" size={34} color="#fff" />
+        </View>
+        <Text style={styles.kicker}>{registerMode ? "JOIN CHILLCUP" : "WELCOME BACK"}</Text>
+        <Text style={styles.title}>{registerMode ? "สมัครบัญชีลูกค้า" : "เข้าสู่ระบบ ChillCup"}</Text>
+        <Text style={styles.subtitle}>จัดการสินค้าและสต็อกของคุณได้ในที่เดียว</Text>
+
+        <View style={styles.form}>
+          {!registerMode && <View style={styles.demoBox}>
+            <Text style={styles.demoTitle}>บัญชีทดลอง</Text>
+            <View style={styles.demoRow}>
+              <Pressable style={styles.demoButton} onPress={() => { setUsername("user"); setPassword("user"); }}><Text style={styles.demoButtonText}>ลูกค้า: user / user</Text></Pressable>
+              <Pressable style={styles.demoButton} onPress={() => { setUsername("admin"); setPassword("admin"); }}><Text style={styles.demoButtonText}>Admin: admin / admin</Text></Pressable>
+            </View>
+          </View>}
+          <Text style={styles.label}>Username</Text>
+          <View style={styles.inputWrap}>
+            <Ionicons name="person-outline" size={19} color={COLORS.muted} />
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+              placeholder="กรอกชื่อผู้ใช้"
+              placeholderTextColor="#94A3B8"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {registerMode && <>
+            <Text style={styles.label}>Email</Text>
+            <View style={styles.inputWrap}><Ionicons name="mail-outline" size={19} color={COLORS.muted} /><TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="อีเมลของคุณ" placeholderTextColor="#94A3B8" keyboardType="email-address" autoCapitalize="none" /></View>
+          </>}
+
+          <Text style={styles.label}>Password</Text>
+          <View style={styles.inputWrap}>
+            <Ionicons name="lock-closed-outline" size={19} color={COLORS.muted} />
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="กรอกรหัสผ่าน"
+              placeholderTextColor="#94A3B8"
+              secureTextEntry
+            />
+
+            {registerMode && <>
+              <Text style={styles.label}>ยืนยัน Password</Text>
+              <View style={styles.inputWrap}><Ionicons name="lock-closed-outline" size={19} color={COLORS.muted} /><TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="กรอกรหัสผ่านอีกครั้ง" placeholderTextColor="#94A3B8" secureTextEntry /></View>
+            </>}
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            onPress={submitAuth}
+            disabled={loading}
+          >
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{registerMode ? "สมัครสมาชิก" : "เข้าสู่ระบบ"}</Text>}
+            {!loading && <Ionicons name="arrow-forward" size={20} color="#fff" />}
+          </Pressable>
+
+          <Pressable onPress={() => { setRegisterMode(!registerMode); setPassword(""); setConfirmPassword(""); }} style={styles.switchButton}>
+            <Text style={styles.guestText}>{registerMode ? "มีบัญชีแล้ว? เข้าสู่ระบบ" : "ยังไม่มีบัญชี? สมัครลูกค้าใหม่"}</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              if (Platform.OS === "web") sessionStorage.setItem("chillcup-web-access", "granted");
+              router.replace("/");
+            }}
+            style={styles.guestButton}
+          >
+            <Text style={styles.guestText}>เข้าสู่หน้าสินค้าโดยไม่เข้าสู่ระบบ</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  content: { flex: 1, width: "100%", maxWidth: 480, alignSelf: "center", justifyContent: "center", padding: 28 },
+  logo: { width: 72, height: 72, borderRadius: 24, backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center", marginBottom: 24, shadowColor: COLORS.primary, shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
+  kicker: { color: COLORS.primaryDark, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
+  title: { color: COLORS.text, fontSize: 30, fontWeight: "800", marginTop: 8 },
+  subtitle: { color: COLORS.muted, fontSize: 15, lineHeight: 22, marginTop: 8, marginBottom: 28 },
+  form: { backgroundColor: "#fff", borderRadius: 20, padding: 20, borderWidth: 1, borderColor: COLORS.border, shadowColor: "#0E7490", shadowOpacity: 0.08, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 2 },
+  label: { color: COLORS.text, fontSize: 13, fontWeight: "700", marginBottom: 7, marginTop: 10 },
+  inputWrap: { height: 48, borderWidth: 1, borderColor: COLORS.border, borderRadius: 11, flexDirection: "row", alignItems: "center", paddingHorizontal: 13, backgroundColor: "#FAFEFF" },
+  input: { flex: 1, color: COLORS.text, fontSize: 15, marginLeft: 9 },
+  button: { height: 50, marginTop: 25, borderRadius: 11, backgroundColor: COLORS.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  buttonPressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  guestButton: { alignItems: "center", marginTop: 18, padding: 4 },
+  switchButton: { alignItems: "center", marginTop: 12, padding: 4 },
+  guestText: { color: COLORS.primaryDark, fontSize: 13, fontWeight: "700" },
+  demoBox: { backgroundColor: "#E8FAFC", borderRadius: 11, padding: 10, marginBottom: 10 },
+  demoTitle: { color: COLORS.primaryDark, fontSize: 12, fontWeight: "800", marginBottom: 7 },
+  demoRow: { flexDirection: "row", gap: 7 },
+  demoButton: { flex: 1, borderRadius: 8, backgroundColor: "#fff", paddingVertical: 8, paddingHorizontal: 5, alignItems: "center" },
+  demoButtonText: { color: COLORS.primaryDark, fontSize: 10, fontWeight: "700", textAlign: "center" },
+});

@@ -1,9 +1,13 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { API_AUTH_URL, API_BASE_URL } from "../constants/api";
+import { addToCart, getCartCount, getProductStock, getSession, setSession } from "../constants/store";
 
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -24,19 +28,16 @@ import {
 // ======================================
 // Backend API Configuration
 // ======================================
-const API_BASE_URL = "http://119.59.102.161:3101/api/products";
-const API_AUTH_URL = "http://119.59.102.161:3101/api";
-
 const COLORS = {
   primary: "#00a8b1",
   primaryDark: "#0E7490",
   primaryLight: "#67E8F9",
   accent: "#06B6D4",
-  background: "#F0FBFF",
-  surface: "#FFFFFF",
-  border: "#DCF2F8",
-  text: "#0F2A37",
-  textSecondary: "#5B7C89",
+  background: "#071A2A",
+  surface: "#102B43",
+  border: "#1D4B67",
+  text: "#E7FAFF",
+  textSecondary: "#91B8C7",
   badgeBg: "#10B981",
   warning: "#F59E0B",
   danger: "#FF6B6B",
@@ -99,16 +100,299 @@ const emptyForm: ProductForm = {
   status: "Available",
 };
 
+const demoProducts: Product[] = [
+  {
+    id: 1,
+    product_name: "ChillCup Arctic 500ml",
+    brand: "ChillCup",
+    category: "แก้วเก็บความเย็น",
+    color: "Ice Blue",
+    storage: "500ml",
+    price: 399,
+    stock: 18,
+    image: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 2,
+    product_name: "FrostPeak Tumbler 900ml",
+    brand: "FrostPeak",
+    category: "แก้วเก็บความเย็น",
+    color: "Matte Black",
+    storage: "900ml",
+    price: 699,
+    stock: 12,
+    image: "https://images.unsplash.com/photo-1594700406777-45f8f9e6f2f3?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 3,
+    product_name: "BreezeMate Daily Cup 350ml",
+    brand: "BreezeMate",
+    category: "แก้วกาแฟ",
+    color: "Cloud White",
+    storage: "350ml",
+    price: 259,
+    stock: 24,
+    image: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 4,
+    product_name: "PolarSip Travel Mug 450ml",
+    brand: "PolarSip",
+    category: "แก้วกาแฟ",
+    color: "Sage Green",
+    storage: "450ml",
+    price: 489,
+    stock: 15,
+    image: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 5,
+    product_name: "HydroNest Sport Bottle 750ml",
+    brand: "HydroNest",
+    category: "ขวดน้ำ",
+    color: "Ocean Blue",
+    storage: "750ml",
+    price: 599,
+    stock: 10,
+    image: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 6,
+    product_name: "MellowCup Pastel 600ml",
+    brand: "MellowCup",
+    category: "แก้วเก็บความเย็น",
+    color: "Lavender",
+    storage: "600ml",
+    price: 449,
+    stock: 20,
+    image: "https://images.unsplash.com/photo-1577937927133-66ef06acdf18?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 7,
+    product_name: "Summit Lock Tumbler 1200ml",
+    brand: "Summit Lock",
+    category: "แก้วเก็บความเย็น",
+    color: "Forest Green",
+    storage: "1200ml",
+    price: 899,
+    stock: 7,
+    image: "https://images.unsplash.com/photo-1523362628745-0c100150b504?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 8,
+    product_name: "UrbanChill Slim 400ml",
+    brand: "UrbanChill",
+    category: "แก้วกาแฟ",
+    color: "Rose Pink",
+    storage: "400ml",
+    price: 329,
+    stock: 16,
+    image: "https://images.unsplash.com/photo-1514228742587-6b1558fcf93a?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 9,
+    product_name: "Alpine Steel Cup 500ml",
+    brand: "Alpine",
+    category: "แก้วเก็บความเย็น",
+    color: "Silver",
+    storage: "500ml",
+    price: 529,
+    stock: 9,
+    image: "https://images.unsplash.com/photo-1544145945-f90425340c7e?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 10,
+    product_name: "SunnyDay Kids Bottle 420ml",
+    brand: "SunnyDay",
+    category: "ขวดน้ำ",
+    color: "Sunshine Yellow",
+    storage: "420ml",
+    price: 299,
+    stock: 22,
+    image: "https://images.unsplash.com/photo-1523362628745-0c100150b504?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 11,
+    product_name: "NightOwl Coffee Tumbler 380ml",
+    brand: "NightOwl",
+    category: "แก้วกาแฟ",
+    color: "Charcoal",
+    storage: "380ml",
+    price: 379,
+    stock: 14,
+    image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 12,
+    product_name: "CoralWave Straw Cup 700ml",
+    brand: "CoralWave",
+    category: "แก้วเก็บความเย็น",
+    color: "Coral",
+    storage: "700ml",
+    price: 649,
+    stock: 11,
+    image: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 13,
+    product_name: "Terra Ceramic Chill 320ml",
+    brand: "Terra",
+    category: "แก้วกาแฟ",
+    color: "Terracotta",
+    storage: "320ml",
+    price: 429,
+    stock: 8,
+    image: "https://images.unsplash.com/photo-1498804103079-a6351b050096?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 14,
+    product_name: "AquaVault Flip Bottle 1000ml",
+    brand: "AquaVault",
+    category: "ขวดน้ำ",
+    color: "Aqua",
+    storage: "1000ml",
+    price: 759,
+    stock: 6,
+    image: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 15,
+    product_name: "CloudNine Double Wall 550ml",
+    brand: "CloudNine",
+    category: "แก้วเก็บความเย็น",
+    color: "Cream",
+    storage: "550ml",
+    price: 579,
+    stock: 13,
+    image: "https://images.unsplash.com/photo-1577937927133-66ef06acdf18?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 16,
+    product_name: "VoyageSeal Commuter 420ml",
+    brand: "VoyageSeal",
+    category: "แก้วเดินทาง",
+    color: "Midnight Blue",
+    storage: "420ml",
+    price: 559,
+    stock: 10,
+    image: "https://images.unsplash.com/photo-1544787219-7f47ccb76574?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 17,
+    product_name: "TrailFlow Active Bottle 800ml",
+    brand: "TrailFlow",
+    category: "สายออกกำลังกาย",
+    color: "Arctic Cyan",
+    storage: "800ml",
+    price: 629,
+    stock: 14,
+    image: "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 18,
+    product_name: "ChillCap Replacement Lid",
+    brand: "ChillCup",
+    category: "อุปกรณ์เสริม",
+    color: "Clear Ice",
+    storage: "Universal",
+    price: 189,
+    stock: 30,
+    image: "https://images.unsplash.com/photo-1589365278144-c9e705f843ba?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 19,
+    product_name: "RoamReady Handle Tumbler 600ml",
+    brand: "RoamReady",
+    category: "แก้วเดินทาง",
+    color: "Stone Grey",
+    storage: "600ml",
+    price: 729,
+    stock: 8,
+    image: "https://images.unsplash.com/photo-1577937927133-66ef06acdf18?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 20,
+    product_name: "PulseGrip Shaker 700ml",
+    brand: "PulseGrip",
+    category: "สายออกกำลังกาย",
+    color: "Graphite",
+    storage: "700ml",
+    price: 479,
+    stock: 18,
+    image: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+  {
+    id: 21,
+    product_name: "SipSteel Metal Straw Set",
+    brand: "ChillCup",
+    category: "อุปกรณ์เสริม",
+    color: "Steel",
+    storage: "3 pieces",
+    price: 149,
+    stock: 25,
+    image: "https://images.unsplash.com/photo-1544145945-f90425340c7e?q=80&w=600&auto=format&fit=crop",
+    status: "Available",
+  },
+];
+
 export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const isMobile = width < 600;
+  const [webAccessGranted, setWebAccessGranted] = useState(Platform.OS !== "web");
+  const [cartCount, setCartCount] = useState(getCartCount());
+  const [hoveredProductId, setHoveredProductId] = useState<number | null>(null);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const carouselVisibility = useRef(new Animated.Value(1)).current;
+  const lastScrollOffset = useRef(0);
+  const backgroundMotion = useRef(new Animated.Value(0)).current;
 
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+
+    const hasWebAccess = sessionStorage.getItem("chillcup-web-access") === "granted";
+    if (hasWebAccess) {
+      setWebAccessGranted(true);
+    } else {
+      router.replace("/login");
+    }
+  }, []);
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(backgroundMotion, { toValue: 1, duration: 9000, useNativeDriver: true }),
+        Animated.timing(backgroundMotion, { toValue: 0, duration: 9000, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [backgroundMotion]);
   // Navigation & Menu Drawer States
   const [activeTab, setActiveTab] = useState<"Home" | "Add" | "Products" | "Categories">("Products");
   const [menuVisible, setMenuVisible] = useState(false);
 
   // Auth States
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => getSession()?.user || null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
 
@@ -154,6 +438,15 @@ export default function HomeScreen() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
+      if (getSession()?.token === "demo-session") {
+        const localProducts = demoProducts.map((product) => ({
+          ...product,
+          stock: getProductStock(product.id, product.stock),
+        }));
+        setProducts(localProducts);
+        filterData(searchQuery, localProducts);
+        return;
+      }
       const response = await fetch(API_BASE_URL);
       if (!response.ok) {
         throw new Error(`ไม่สามารถโหลดข้อมูลสินค้าได้ (HTTP ${response.status})`);
@@ -162,25 +455,34 @@ export default function HomeScreen() {
       if (!Array.isArray(data)) {
         throw new Error("รูปแบบข้อมูล Products ไม่ถูกต้อง");
       }
-      setProducts(data);
-      filterData(searchQuery, data);
+      const productsWithLocalStock = data.map((product: Product) => ({
+        ...product,
+        stock: getProductStock(product.id, product.stock),
+      }));
+      setProducts(productsWithLocalStock);
+      filterData(searchQuery, productsWithLocalStock);
     } catch (error) {
-      console.error("Error fetching products:", error);
-      setProducts([]);
-      setFilteredProducts([]);
+      const localProducts = demoProducts.map((product) => ({
+        ...product,
+        stock: getProductStock(product.id, product.stock),
+      }));
+      setProducts(localProducts);
+      filterData(searchQuery, localProducts);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchProducts();
+    }, [])
+  );
 
   // ======================================
   // SEARCH & FILTER
   // ======================================
-  const filterData = (text: string, list: Product[]) => {
+  function filterData(text: string, list: Product[]) {
     if (!text.trim()) {
       setFilteredProducts(list);
       return;
@@ -194,7 +496,7 @@ export default function HomeScreen() {
         item.productCode?.toLowerCase().includes(keyword)
     );
     setFilteredProducts(filtered);
-  };
+  }
 
   const handleSearch = (text: string) => {
     setSearchQuery(text);
@@ -210,6 +512,16 @@ export default function HomeScreen() {
     });
   };
 
+  const addProductToCart = (product: Product) => {
+    if ((product.stock ?? 0) < 1) {
+      showAlert("สินค้าหมด", "สินค้านี้ไม่มีในสต็อกแล้ว");
+      return;
+    }
+    addToCart(product);
+    setCartCount(getCartCount());
+    showAlert("เพิ่มลงตะกร้าแล้ว", product.product_name);
+  };
+
   const categories = ["All", ...Array.from(new Set(products.map((p) => p.category).filter(Boolean) as string[]))];
 
   const visibleProducts = filteredProducts
@@ -219,6 +531,18 @@ export default function HomeScreen() {
       if (sortOrder === "desc") return (b.price ?? 0) - (a.price ?? 0);
       return 0;
     });
+
+  useEffect(() => {
+    if (visibleProducts.length < 2) return;
+    const timer = setInterval(() => {
+      setSlideIndex((current) => (current + 1) % Math.min(visibleProducts.length, 5));
+    }, 4200);
+    return () => clearInterval(timer);
+  }, [visibleProducts.length]);
+
+  if (!webAccessGranted) {
+    return <View style={styles.loadingContainer} />;
+  }
 
   // ======================================
   // AUTHENTICATION HANDLERS (FIXED)
@@ -258,6 +582,23 @@ export default function HomeScreen() {
 
     setAuthLoading(true);
 
+    // Keep the local demo flow usable when the optional backend/MySQL is offline.
+    if (isLoginMode) {
+      const demoUsername = authUsername.trim().toLowerCase();
+      if ((demoUsername === "admin" || demoUsername === "user") && authPassword === demoUsername) {
+        const demoUser: User = demoUsername === "admin"
+          ? { id: 0, username: "admin", name: "Administrator", role: "admin" }
+          : { id: 1, username: "user", name: "Demo Customer", role: "user" };
+        setSession(demoUser, "demo-session");
+        setCurrentUser(demoUser);
+        setAuthModalVisible(false);
+        resetAuthForm();
+        showAlert("สำเร็จ", `เข้าสู่ระบบเรียบร้อย ยินดีต้อนรับ ${demoUser.name}`);
+        setAuthLoading(false);
+        return;
+      }
+    }
+
     const endpoint = isLoginMode ? "/login" : "/register";
     const payload = isLoginMode
       ? {
@@ -291,7 +632,9 @@ export default function HomeScreen() {
 
       // 4. กรณีดำเนินการสำเร็จ
       if (isLoginMode) {
-        setCurrentUser(data.user || { id: 1, username: authUsername });
+        const signedInUser = data.user || { id: 1, username: authUsername };
+        setSession(signedInUser, data.token || "");
+        setCurrentUser(signedInUser);
         setAuthModalVisible(false);
         resetAuthForm();
         showAlert("สำเร็จ", `เข้าสู่ระบบเรียบร้อย ยินดีต้อนรับ ${data.user?.name || authUsername}`);
@@ -315,6 +658,10 @@ export default function HomeScreen() {
   const handleLogout = () => {
     const logoutAction = () => {
       setCurrentUser(null);
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem("chillcup-session");
+        sessionStorage.removeItem("chillcup-web-access");
+      }
       showAlert("ออกจากระบบ", "คุณได้ออกจากระบบเรียบร้อยแล้ว");
     };
 
@@ -350,9 +697,15 @@ export default function HomeScreen() {
   const executeDeleteProduct = async (id: number) => {
     setDeletingId(id);
     try {
+      if (getSession()?.token === "demo-session") {
+        setProducts((prev) => prev.filter((p) => p.id !== id));
+        setFilteredProducts((prev) => prev.filter((p) => p.id !== id));
+        showAlert("สำเร็จ", "ลบสินค้าเรียบร้อยแล้ว");
+        return;
+      }
       const response = await fetch(`${API_BASE_URL}/${id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(getSession()?.token ? { Authorization: `Bearer ${getSession()?.token}` } : {}) },
       });
 
       if (!response.ok) {
@@ -438,10 +791,28 @@ export default function HomeScreen() {
         status: form.status.trim() || "Available",
       };
 
+      if (getSession()?.token === "demo-session") {
+        if (editingProduct) {
+          const updatedProduct = { ...editingProduct, ...payload, id: editingProduct.id };
+          setProducts((prev) => prev.map((product) => product.id === editingProduct.id ? updatedProduct : product));
+          setFilteredProducts((prev) => prev.map((product) => product.id === editingProduct.id ? updatedProduct : product));
+          showAlert("สำเร็จ", "แก้ไขสินค้าเรียบร้อยแล้ว");
+        } else {
+          const newProduct = { ...payload, id: Date.now(), created_at: new Date().toISOString() } as Product;
+          setProducts((prev) => [newProduct, ...prev]);
+          setFilteredProducts((prev) => [newProduct, ...prev]);
+          showAlert("สำเร็จ", "เพิ่มสินค้าเรียบร้อยแล้ว");
+        }
+        setModalVisible(false);
+        setEditingProduct(null);
+        setForm({ ...emptyForm });
+        return;
+      }
+
       if (!editingProduct) {
         const response = await fetch(API_BASE_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(getSession()?.token ? { Authorization: `Bearer ${getSession()?.token}` } : {}) },
           body: JSON.stringify(payload),
         });
         const data = await response.json();
@@ -450,7 +821,7 @@ export default function HomeScreen() {
       } else {
         const response = await fetch(`${API_BASE_URL}/${editingProduct.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(getSession()?.token ? { Authorization: `Bearer ${getSession()?.token}` } : {}) },
           body: JSON.stringify(payload),
         });
         const data = await response.json();
@@ -474,7 +845,11 @@ export default function HomeScreen() {
   // RENDER PRODUCT ITEM
   // ======================================
   const renderProduct = ({ item }: { item: Product }) => (
-    <View style={styles.card}>
+    <Pressable
+      style={[styles.card, hoveredProductId === item.id && styles.cardFocused]}
+      onHoverIn={() => setHoveredProductId(item.id)}
+      onHoverOut={() => setHoveredProductId(null)}
+    >
       <TouchableOpacity
         style={styles.cardContent}
         onPress={() => openProductDetail(item)}
@@ -487,7 +862,7 @@ export default function HomeScreen() {
                 ? { uri: item.image }
                 : { uri: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=600&auto=format&fit=crop" }
             }
-            style={styles.thumbnail}
+            style={[styles.thumbnail, hoveredProductId === item.id && styles.thumbnailFocused]}
             resizeMode="cover"
           />
 
@@ -560,38 +935,39 @@ export default function HomeScreen() {
 
           {/* ACTION BUTTONS */}
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => openEditProduct(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="create-outline" size={14} color="#fff" />
-              <Text style={styles.buttonText}>Edit</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.deleteButton,
-                deletingId === item.id && styles.deleteButtonDisabled,
-              ]}
-              onPress={() => handleDeleteConfirm(item)}
-              disabled={deletingId === item.id}
-              activeOpacity={0.7}
-            >
-              {deletingId === item.id ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="trash-outline" size={14} color="#fff" />
-                  <Text style={styles.buttonText}>Delete</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {currentUser?.role !== "admin" && <TouchableOpacity style={[styles.cartButton, (item.stock ?? 0) < 1 && styles.deleteButtonDisabled]} onPress={() => addProductToCart(item)} disabled={(item.stock ?? 0) < 1} activeOpacity={0.7}>
+              <Ionicons name="cart-outline" size={14} color="#fff" />
+              <Text style={styles.buttonText}>{(item.stock ?? 0) < 1 ? "หมด" : "ใส่ตะกร้า"}</Text>
+            </TouchableOpacity>}
+            {currentUser?.role === "admin" && <>
+              <TouchableOpacity style={styles.editButton} onPress={() => openEditProduct(item)} activeOpacity={0.7}>
+                <Ionicons name="create-outline" size={14} color="#fff" />
+                <Text style={styles.buttonText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.deleteButton, deletingId === item.id && styles.deleteButtonDisabled]} onPress={() => handleDeleteConfirm(item)} disabled={deletingId === item.id} activeOpacity={0.7}>
+                {deletingId === item.id ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="trash-outline" size={14} color="#fff" /><Text style={styles.buttonText}>Delete</Text></>}
+              </TouchableOpacity>
+            </>}
           </View>
         </View>
       </TouchableOpacity>
-    </View>
+    </Pressable>
   );
+
+  const slides = visibleProducts.slice(0, 5);
+  const activeSlide = slides[slideIndex % Math.max(slides.length, 1)];
+
+  const handleProductListScroll = (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    const offset = event.nativeEvent.contentOffset.y;
+    const direction = offset - lastScrollOffset.current;
+    if (Math.abs(direction) < 6) return;
+    lastScrollOffset.current = offset;
+    Animated.timing(carouselVisibility, {
+      toValue: direction > 0 ? 0 : 1,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  };
 
   const renderInput = (
     label: string,
@@ -614,7 +990,24 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <View style={styles.animatedBackground} pointerEvents="none">
+        <Animated.View style={[styles.backgroundOrb, styles.backgroundOrbOne, {
+          transform: [
+            { translateX: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [-30, 65] }) },
+            { translateY: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [0, 45] }) },
+          ],
+        }]} />
+        <Animated.View style={[styles.backgroundOrb, styles.backgroundOrbTwo, {
+          transform: [
+            { translateX: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [35, -50] }) },
+            { translateY: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [20, -35] }) },
+          ],
+        }]} />
+        <Animated.View style={[styles.backgroundOrb, styles.backgroundOrbThree, {
+          opacity: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.28] }),
+        }]} />
+      </View>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -636,6 +1029,8 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        <View style={styles.headerSpacer} />
+
         {/* PROFILE ICON */}
         <Pressable
           style={({ pressed }) => [
@@ -643,12 +1038,44 @@ export default function HomeScreen() {
             currentUser && { backgroundColor: COLORS.badgeBg },
             pressed && { opacity: 0.7 },
           ]}
-          onPress={() => (currentUser ? handleLogout() : setAuthModalVisible(true))}
+          onPress={() => (currentUser ? router.push({ pathname: "/account" } as never) : setAuthModalVisible(true))}
           hitSlop={15}
         >
           <Ionicons name={currentUser ? "checkmark-circle" : "person"} size={16} color="#fff" />
         </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.6 }]}
+          onPress={() => currentUser?.role !== "admin" && router.push("/cart")}
+          hitSlop={12}
+        >
+          {currentUser?.role !== "admin" && <Ionicons name="cart-outline" size={23} color={COLORS.text} />}
+          {currentUser?.role !== "admin" && cartCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{cartCount}</Text></View>}
+        </Pressable>
       </View>
+
+      {activeSlide && <Animated.View style={[styles.heroCarousel, {
+        height: carouselVisibility.interpolate({ inputRange: [0, 1], outputRange: [0, 220] }),
+        opacity: carouselVisibility,
+        transform: [{ translateY: carouselVisibility.interpolate({ inputRange: [0, 1], outputRange: [-28, 0] }) }],
+      }]}>
+        <Image
+          source={{ uri: activeSlide.image || "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=900&auto=format&fit=crop" }}
+          style={styles.heroImage}
+          resizeMode="cover"
+        />
+        <View style={styles.heroShade} />
+        <View style={styles.heroCopy}>
+          <Text style={styles.heroEyebrow}>CHILLCUP FEATURED</Text>
+          <Text style={styles.heroTitle} numberOfLines={2}>{activeSlide.product_name}</Text>
+          <Text style={styles.heroMeta}>{activeSlide.brand || "ChillCup"} · ฿{Number(activeSlide.price).toLocaleString()}</Text>
+          <TouchableOpacity style={styles.heroButton} onPress={() => openProductDetail(activeSlide)} activeOpacity={0.8}>
+            <Text style={styles.heroButtonText}>ดูรายละเอียด</Text><Ionicons name="arrow-forward" size={16} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.carouselDots}>
+          {slides.map((slide, index) => <Pressable key={slide.id} onPress={() => setSlideIndex(index)} style={[styles.carouselDot, index === slideIndex % slides.length && styles.carouselDotActive]} />)}
+        </View>
+      </Animated.View>}
 
       {/* SEARCH ROW */}
       <View style={[styles.searchRow, isMobile && styles.searchRowMobile]}>
@@ -682,9 +1109,9 @@ export default function HomeScreen() {
           />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.addButton} onPress={openAddProduct} activeOpacity={0.8}>
+        {currentUser?.role === "admin" && <TouchableOpacity style={styles.addButton} onPress={openAddProduct} activeOpacity={0.8}>
           <Text style={styles.addButtonText}>+ Add</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
         <TouchableOpacity style={styles.refreshButton} onPress={fetchProducts} activeOpacity={0.7}>
           <Ionicons name="refresh" size={16} color={COLORS.primary} />
@@ -724,6 +1151,8 @@ export default function HomeScreen() {
           data={visibleProducts}
           style={styles.productList}
           showsVerticalScrollIndicator={true}
+          onScroll={handleProductListScroll}
+          scrollEventThrottle={16}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -744,7 +1173,7 @@ export default function HomeScreen() {
 
       {/* BOTTOM NAVIGATION */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab("Home")} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.replace("/home")} activeOpacity={0.7}>
           <Ionicons
             name="home-outline"
             size={22}
@@ -758,16 +1187,23 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => {
+            if (currentUser?.role !== "admin") {
+              showAlert("สำหรับ Admin เท่านั้น", "ลูกค้าสามารถเลือกซื้อสินค้าจากหน้าร้านได้");
+              return;
+            }
             setActiveTab("Add");
-            openAddProduct();
+            router.push("/add");
           }}
           activeOpacity={0.7}
         >
-          <Ionicons name="add-outline" size={24} color={COLORS.primary} />
-          <Text style={[styles.navText, { color: COLORS.primary, fontWeight: "700" }]}>เพิ่ม</Text>
+          <Ionicons name="add-outline" size={24} color={currentUser?.role === "admin" ? COLORS.primary : COLORS.textSecondary} />
+          <Text style={[styles.navText, currentUser?.role === "admin" && { color: COLORS.primary, fontWeight: "700" }]}>เพิ่ม</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab("Products")} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.navItem} onPress={() => {
+          setActiveTab("Products");
+          router.replace("/");
+        }} activeOpacity={0.7}>
           <MaterialIcons
             name="inventory-2"
             size={22}
@@ -778,7 +1214,7 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab("Categories")} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.replace("/categories")} activeOpacity={0.7}>
           <Ionicons
             name="folder-outline"
             size={22}
@@ -1066,11 +1502,56 @@ export default function HomeScreen() {
                 onPress={() => {
                   setMenuVisible(false);
                   setActiveTab("Home");
+                  router.replace("/home");
                 }}
               >
                 <Ionicons name="home-outline" size={20} color={COLORS.textSecondary} />
                 <Text style={styles.menuItemText}>หน้าแรก</Text>
               </TouchableOpacity>
+
+              {currentUser?.role === "admin" && <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setMenuVisible(false);
+                  router.push({ pathname: "/admin-orders" } as never);
+                }}
+              >
+                <Ionicons name="receipt-outline" size={20} color={COLORS.primary} />
+                <Text style={[styles.menuItemText, { color: COLORS.primary }]}>ตรวจสอบการชำระเงิน</Text>
+              </TouchableOpacity>}
+
+              {currentUser?.role !== "admin" && <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setMenuVisible(false);
+                  router.push({ pathname: "/track-order" } as never);
+                }}
+              >
+                <Ionicons name="navigate-circle-outline" size={20} color={COLORS.primary} />
+                <Text style={[styles.menuItemText, { color: COLORS.primary }]}>ติดตามคำสั่งซื้อ</Text>
+              </TouchableOpacity>}
+
+              {currentUser?.role !== "admin" && <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setMenuVisible(false);
+                  router.push({ pathname: "/purchase-history" } as never);
+                }}
+              >
+                <Ionicons name="time-outline" size={20} color={COLORS.primary} />
+                <Text style={[styles.menuItemText, { color: COLORS.primary }]}>ประวัติการซื้อ</Text>
+              </TouchableOpacity>}
+
+              {currentUser && <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setMenuVisible(false);
+                  router.push({ pathname: "/account" } as never);
+                }}
+              >
+                <Ionicons name="person-circle-outline" size={20} color={COLORS.primary} />
+                <Text style={[styles.menuItemText, { color: COLORS.primary }]}>จัดการบัญชี</Text>
+              </TouchableOpacity>}
 
               <TouchableOpacity
                 style={styles.menuItem}
@@ -1128,14 +1609,46 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: COLORS.background,
   },
+  animatedBackground: {
+    ...StyleSheet.absoluteFill,
+    overflow: "hidden",
+  },
+  backgroundOrb: {
+    position: "absolute",
+    borderRadius: 999,
+  },
+  backgroundOrbOne: {
+    width: 330,
+    height: 330,
+    top: -160,
+    right: -80,
+    backgroundColor: "#0A667D",
+    opacity: 0.2,
+  },
+  backgroundOrbTwo: {
+    width: 280,
+    height: 280,
+    bottom: 90,
+    left: -150,
+    backgroundColor: "#075985",
+    opacity: 0.22,
+  },
+  backgroundOrbThree: {
+    width: 190,
+    height: 190,
+    top: "42%",
+    right: "18%",
+    backgroundColor: "#22D3EE",
+    opacity: 0.16,
+  },
   header: {
     width: "100%",
     height: 60,
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 16,
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(7, 26, 42, 0.94)",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     zIndex: 10,
@@ -1144,6 +1657,84 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    marginLeft: 6,
+  },
+  headerSpacer: {
+    flex: 1,
+  },
+  heroCarousel: {
+    height: 220,
+    marginHorizontal: 16,
+    marginTop: 14,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: COLORS.primaryDark,
+    ...Platform.select({ web: { cursor: "pointer" as any } }),
+  },
+  heroImage: {
+    width: "100%",
+    height: "100%",
+  },
+  heroShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(4, 40, 58, 0.48)",
+  },
+  heroCopy: {
+    position: "absolute",
+    left: 22,
+    top: 24,
+    maxWidth: 390,
+  },
+  heroEyebrow: {
+    color: "#A7F3F0",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+  heroTitle: {
+    color: "#fff",
+    fontSize: 25,
+    fontWeight: "900",
+    marginTop: 8,
+  },
+  heroMeta: {
+    color: "#D5FAFA",
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 7,
+  },
+  heroButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 18,
+  },
+  heroButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  carouselDots: {
+    position: "absolute",
+    right: 18,
+    bottom: 16,
+    flexDirection: "row",
+    gap: 7,
+  },
+  carouselDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.45)",
+  },
+  carouselDotActive: {
+    width: 23,
+    backgroundColor: "#A7F3F0",
   },
   brandIconWrap: {
     width: 32,
@@ -1156,7 +1747,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: COLORS.primaryDark,
+    color: "#B9F6F4",
     lineHeight: 20,
   },
   headerSubtitle: {
@@ -1165,6 +1756,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 6,
+    position: "relative",
     ...Platform.select({
       web: { cursor: "pointer" as any },
     }),
@@ -1179,6 +1771,24 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { cursor: "pointer" as any },
     }),
+    marginRight: 14,
+  },
+  cartBadge: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: COLORS.danger,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "800",
   },
   searchRow: {
     width: "100%",
@@ -1186,7 +1796,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "#102B43",
     gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -1198,7 +1808,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#183850",
     borderRadius: 8,
     paddingHorizontal: 10,
     height: 40,
@@ -1235,7 +1845,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#E0F7FA",
+    backgroundColor: "#123B55",
     ...Platform.select({
       web: { cursor: "pointer" as any },
     }),
@@ -1246,13 +1856,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#E0F7FA",
+    backgroundColor: "#123B55",
     ...Platform.select({
       web: { cursor: "pointer" as any },
     }),
   },
   chipRow: {
-    backgroundColor: "#fff",
+    backgroundColor: "#102B43",
     maxHeight: 44,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -1261,7 +1871,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#EEFBFE",
+    backgroundColor: "#123B55",
     justifyContent: "center",
     alignSelf: "center",
     marginVertical: 7,
@@ -1291,7 +1901,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    backgroundColor: "#fff",
+    backgroundColor: "#102B43",
     borderRadius: 14,
     padding: 14,
     marginVertical: 6,
@@ -1302,6 +1912,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
+    ...Platform.select({
+      web: { transitionDuration: "180ms", cursor: "pointer" as any },
+    }),
+  },
+  cardFocused: {
+    borderColor: COLORS.primaryLight,
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    transform: [{ scale: 1.015 }],
+    elevation: 5,
   },
   cardContent: {
     width: "100%",
@@ -1316,7 +1936,15 @@ const styles = StyleSheet.create({
     width: 85,
     height: 85,
     borderRadius: 10,
-    backgroundColor: "#E6F7FB",
+    backgroundColor: "#183850",
+    ...Platform.select({
+      web: { transitionDuration: "180ms" },
+    }),
+  },
+  thumbnailFocused: {
+    transform: [{ scale: 1.08 }],
+    borderWidth: 2,
+    borderColor: COLORS.primaryLight,
   },
   favoriteButton: {
     position: "absolute",
@@ -1326,7 +1954,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: "#fff",
+    backgroundColor: "#DDF8F7",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -1361,7 +1989,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "#EEFBFE",
+    backgroundColor: "#123B55",
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1422,6 +2050,18 @@ const styles = StyleSheet.create({
       web: { cursor: "pointer" as any },
     }),
   },
+  cartButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.primaryDark,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    ...Platform.select({
+      web: { cursor: "pointer" as any },
+    }),
+  },
   deleteButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1461,7 +2101,7 @@ const styles = StyleSheet.create({
   bottomNav: {
     width: "100%",
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: "#0B2438",
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     paddingVertical: 8,
@@ -1489,7 +2129,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 600,
     maxHeight: "90%",
-    backgroundColor: "#fff",
+    backgroundColor: "#102B43",
     borderRadius: 16,
     overflow: "hidden",
   },
@@ -1532,7 +2172,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     color: COLORS.text,
-    backgroundColor: "#fff",
+    backgroundColor: "#183850",
     fontSize: 14,
   },
   descriptionInput: {
@@ -1562,14 +2202,14 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 450,
     maxHeight: "85%",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#102B43",
     borderRadius: 16,
     overflow: "hidden",
   },
   detailImageBox: {
     width: "100%",
     height: 180,
-    backgroundColor: "#EEFBFE",
+    backgroundColor: "#183850",
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",

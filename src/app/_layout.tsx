@@ -12,7 +12,7 @@ export default function TabLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
-      <Stack screenOptions={{ headerShown: false }} />
+      <Stack initialRouteName="login" screenOptions={{ headerShown: false, animation: 'fade' }} />
     </ThemeProvider>
   );
 }

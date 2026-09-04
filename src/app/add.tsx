@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Alert,
     SafeAreaView,
@@ -11,6 +11,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { API_BASE_URL } from "../constants/api";
+import { getSession } from "../constants/store";
 
 const COLORS = {
   primary: "#ff0000",
@@ -27,16 +29,40 @@ export default function AddScreen() {
   const [price, setPrice] = useState("");
   const [image, setImage] = useState("");
 
-  const saveProduct = () => {
-    Alert.alert(
-      "สำเร็จ",
-      "เพิ่มสินค้าเรียบร้อย (ตัวอย่าง UI)\nภายหลังสามารถเชื่อม API ได้"
-    );
+  useEffect(() => {
+    if (getSession()?.user.role !== "admin") router.replace("/");
+  }, []);
 
-    setName("");
-    setBrand("");
-    setPrice("");
-    setImage("");
+  const saveProduct = async () => {
+    if (!name.trim() || !price.trim()) {
+      Alert.alert("ข้อมูลไม่ครบ", "กรุณากรอกชื่อสินค้าและราคา");
+      return;
+    }
+
+    try {
+      const session = getSession();
+      const response = await fetch(API_BASE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+        },
+        body: JSON.stringify({
+          product_name: name.trim(),
+          brand: brand.trim(),
+          price: Number(price) || 0,
+          image: image.trim(),
+          stock: 0,
+          status: "Available",
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "ไม่สามารถเพิ่มสินค้าได้");
+      Alert.alert("สำเร็จ", "เพิ่มสินค้าเรียบร้อยแล้ว");
+      router.replace("/");
+    } catch (error) {
+      Alert.alert("เกิดข้อผิดพลาด", error instanceof Error ? error.message : "ไม่สามารถเพิ่มสินค้าได้");
+    }
   };
 
   return (
