@@ -107,12 +107,13 @@ export function getCart() {
   return cart;
 }
 
-export function addToCart(product: CartProduct) {
+export function addToCart(product: CartProduct, quantity = 1) {
+  const safeQuantity = Math.max(1, Math.min(quantity, product.stock));
   const existing = cart.find((item) => item.product.id === product.id);
   if (existing) {
-    existing.quantity = Math.min(existing.quantity + 1, product.stock);
+    existing.quantity = Math.min(existing.quantity + safeQuantity, product.stock);
   } else if (product.stock > 0) {
-    cart = [...cart, { product, quantity: 1 }];
+    cart = [...cart, { product, quantity: safeQuantity }];
   }
 }
 

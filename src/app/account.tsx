@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { API_AUTH_URL } from "../constants/api";
 import { clearSession, getSession, updateSessionUser } from "../constants/store";
 
 const COLORS = { bg: "#F4FBFD", white: "#FFFFFF", primary: "#00A8B1", deep: "#0E7490", ink: "#0F2A37", muted: "#63818D", line: "#CBEAF0", ice: "#E8FAFC", danger: "#EF476F" };
@@ -20,10 +21,39 @@ export default function AccountScreen() {
     updateSessionUser({ name: name.trim(), email: email.trim() });
     notify("บันทึกสำเร็จ", "อัปเดตข้อมูลบัญชีแล้ว");
   };
-  const savePassword = () => {
-    if (!currentPassword || !newPassword || newPassword !== confirmPassword) { notify("เปลี่ยนรหัสผ่านไม่สำเร็จ", "กรุณาตรวจสอบรหัสผ่านให้ครบและตรงกัน"); return; }
-    notify("พร้อมใช้งาน", "บันทึกรหัสผ่านใหม่ในโหมดทดลองแล้ว");
-    setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+  const savePassword = async () => {
+    if (!currentPassword || newPassword.length < 6 || newPassword !== confirmPassword) {
+      notify("เปลี่ยนรหัสผ่านไม่สำเร็จ", "กรุณากรอกรหัสเดิม รหัสใหม่อย่างน้อย 6 ตัว และยืนยันรหัสให้ตรงกัน");
+      return;
+    }
+
+    try {
+      const activeSession = getSession();
+      if (!activeSession) return;
+
+      if (activeSession.token === "demo-session") {
+        const savedPassword = typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem(`chillcup-password-${activeSession.user.username}`) || activeSession.user.username
+          : activeSession.user.username;
+        if (currentPassword !== savedPassword) throw new Error("รหัสผ่านปัจจุบันไม่ถูกต้อง");
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem(`chillcup-password-${activeSession.user.username}`, newPassword);
+        }
+      } else {
+        const response = await fetch(`${API_AUTH_URL}/account/password`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${activeSession.token}` },
+          body: JSON.stringify({ currentPassword, newPassword }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "ไม่สามารถเปลี่ยนรหัสผ่านได้");
+      }
+
+      notify("เปลี่ยนรหัสผ่านสำเร็จ", "รหัสผ่านใหม่ถูกบันทึกแล้ว");
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    } catch (error) {
+      notify("เปลี่ยนรหัสผ่านไม่สำเร็จ", error instanceof Error ? error.message : "ไม่สามารถเปลี่ยนรหัสผ่านได้");
+    }
   };
   const logout = () => {
     if (typeof sessionStorage !== "undefined") { sessionStorage.removeItem("chillcup-session"); sessionStorage.removeItem("chillcup-web-access"); }
@@ -35,7 +65,7 @@ export default function AccountScreen() {
 
   return <SafeAreaView style={styles.container}>
     <StatusBar barStyle="dark-content" />
-    <View style={styles.header}><Pressable style={styles.iconButton} onPress={() => router.back()} hitSlop={12}><Ionicons name="arrow-back" size={23} color={COLORS.ink} /></Pressable><View style={styles.headerTitleWrap}><Text style={styles.eyebrow}>CHILLCUP ACCOUNT</Text><Text style={styles.title}>จัดการบัญชี</Text></View><View style={styles.iconButton}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} /></View></View>
+    <View style={styles.header}><Pressable style={styles.iconButton} onPress={() => router.canGoBack() ? router.back() : router.replace("/")} hitSlop={12}><Ionicons name="arrow-back" size={23} color={COLORS.ink} /></Pressable><View style={styles.headerTitleWrap}><Text style={styles.eyebrow}>CHILLCUP ACCOUNT</Text><Text style={styles.title}>จัดการบัญชี</Text></View><View style={styles.iconButton}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} /></View></View>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.identity}><View style={styles.avatar}><Ionicons name={session.user.role === "admin" ? "star" : "person"} size={31} color="#fff" /></View><View style={styles.identityCopy}><Text style={styles.identityName}>{name || session.user.username}</Text><Text style={styles.identityUsername}>@{session.user.username} · {session.user.role === "admin" ? "ผู้ดูแลระบบ" : "ลูกค้า"}</Text></View></View>
       <View style={styles.card}><View style={styles.cardTitleRow}><Ionicons name="person-outline" size={20} color={COLORS.primary} /><Text style={styles.cardTitle}>ข้อมูลส่วนตัว</Text></View><Text style={styles.label}>ชื่อที่แสดง</Text><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="ชื่อของคุณ" placeholderTextColor="#94A3B8" /><Text style={styles.label}>อีเมล</Text><TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" placeholderTextColor="#94A3B8" /><Pressable style={styles.primaryButton} onPress={saveProfile}><Ionicons name="save-outline" size={18} color="#fff" /><Text style={styles.primaryButtonText}>บันทึกข้อมูล</Text></Pressable></View>

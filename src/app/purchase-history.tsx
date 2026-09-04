@@ -37,7 +37,7 @@ export default function PurchaseHistoryScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Pressable style={styles.iconButton} onPress={() => router.back()} hitSlop={12}>
+        <Pressable style={styles.iconButton} onPress={() => router.canGoBack() ? router.back() : router.replace("/")} hitSlop={12}>
           <Ionicons name="arrow-back" size={23} color={COLORS.ink} />
         </Pressable>
         <View style={styles.headerTitleWrap}><Text style={styles.eyebrow}>YOUR CHILLCUP</Text><Text style={styles.title}>ประวัติการซื้อ</Text></View>

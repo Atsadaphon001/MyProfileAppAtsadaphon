@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { getSession } from "../constants/store";
 
 const COLORS = {
   primary: "#00A8B1",
@@ -29,12 +30,14 @@ const categories = [
 ];
 
 export default function CategoriesScreen() {
+  const isAdmin = getSession()?.user.role === "admin";
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
           <Ionicons
             name="arrow-back"
             size={26}
@@ -72,10 +75,10 @@ export default function CategoriesScreen() {
           <Ionicons name="home-outline" size={22} color="#64748B" />
           <Text style={styles.navText}>หน้าแรก</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/add")}>
+        {isAdmin && <TouchableOpacity style={styles.navItem} onPress={() => router.push("/add")}>
             <Ionicons name="add-outline" size={24} color={COLORS.primary} />
           <Text style={styles.navText}>เพิ่ม</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
         <TouchableOpacity style={styles.navItem} onPress={() => router.replace("/")}>
           <MaterialIcons name="inventory-2" size={22} color="#64748B" />
           <Text style={styles.navText}>สินค้า</Text>

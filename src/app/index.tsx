@@ -33,11 +33,11 @@ const COLORS = {
   primaryDark: "#0E7490",
   primaryLight: "#67E8F9",
   accent: "#06B6D4",
-  background: "#071A2A",
-  surface: "#102B43",
-  border: "#1D4B67",
-  text: "#E7FAFF",
-  textSecondary: "#91B8C7",
+  background: "#F4F9FB",
+  surface: "#FFFFFF",
+  border: "#D7E5EA",
+  text: "#163247",
+  textSecondary: "#5F7480",
   badgeBg: "#10B981",
   warning: "#F59E0B",
   danger: "#FF6B6B",
@@ -361,8 +361,10 @@ export default function HomeScreen() {
   const [webAccessGranted, setWebAccessGranted] = useState(Platform.OS !== "web");
   const [cartCount, setCartCount] = useState(getCartCount());
   const [hoveredProductId, setHoveredProductId] = useState<number | null>(null);
+  const [failedImageIds, setFailedImageIds] = useState<Set<number>>(new Set());
   const [slideIndex, setSlideIndex] = useState(0);
   const carouselVisibility = useRef(new Animated.Value(1)).current;
+  const carouselSlideMotion = useRef(new Animated.Value(1)).current;
   const lastScrollOffset = useRef(0);
   const backgroundMotion = useRef(new Animated.Value(0)).current;
 
@@ -380,8 +382,8 @@ export default function HomeScreen() {
   useEffect(() => {
     const animation = Animated.loop(
       Animated.sequence([
-        Animated.timing(backgroundMotion, { toValue: 1, duration: 9000, useNativeDriver: true }),
-        Animated.timing(backgroundMotion, { toValue: 0, duration: 9000, useNativeDriver: true }),
+        Animated.timing(backgroundMotion, { toValue: 1, duration: 4500, useNativeDriver: true }),
+        Animated.timing(backgroundMotion, { toValue: 0, duration: 4500, useNativeDriver: true }),
       ])
     );
     animation.start();
@@ -409,6 +411,7 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [cartQuantities, setCartQuantities] = useState<Record<number, number>>({});
 
   // Extras: Favorites, Categories, Sort
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
@@ -512,14 +515,23 @@ export default function HomeScreen() {
     });
   };
 
+  const changeCartQuantity = (product: Product, change: number) => {
+    const stock = Math.max(0, product.stock ?? 0);
+    setCartQuantities((previous) => {
+      const current = previous[product.id] || 1;
+      return { ...previous, [product.id]: Math.max(1, Math.min(stock || 1, current + change)) };
+    });
+  };
+
   const addProductToCart = (product: Product) => {
     if ((product.stock ?? 0) < 1) {
       showAlert("สินค้าหมด", "สินค้านี้ไม่มีในสต็อกแล้ว");
       return;
     }
-    addToCart(product);
+    const quantity = cartQuantities[product.id] || 1;
+    addToCart(product, quantity);
     setCartCount(getCartCount());
-    showAlert("เพิ่มลงตะกร้าแล้ว", product.product_name);
+    showAlert("เพิ่มลงตะกร้าแล้ว", `${product.product_name} x ${quantity}`);
   };
 
   const categories = ["All", ...Array.from(new Set(products.map((p) => p.category).filter(Boolean) as string[]))];
@@ -539,6 +551,16 @@ export default function HomeScreen() {
     }, 4200);
     return () => clearInterval(timer);
   }, [visibleProducts.length]);
+
+  useEffect(() => {
+    carouselSlideMotion.setValue(0);
+    Animated.timing(carouselSlideMotion, {
+      toValue: 1,
+      duration: 620,
+      easing: (value) => value * (2 - value),
+      useNativeDriver: true,
+    }).start();
+  }, [carouselSlideMotion, slideIndex]);
 
   if (!webAccessGranted) {
     return <View style={styles.loadingContainer} />;
@@ -585,7 +607,10 @@ export default function HomeScreen() {
     // Keep the local demo flow usable when the optional backend/MySQL is offline.
     if (isLoginMode) {
       const demoUsername = authUsername.trim().toLowerCase();
-      if ((demoUsername === "admin" || demoUsername === "user") && authPassword === demoUsername) {
+      const savedDemoPassword = typeof sessionStorage !== "undefined"
+        ? sessionStorage.getItem(`chillcup-password-${demoUsername}`) || demoUsername
+        : demoUsername;
+      if ((demoUsername === "admin" || demoUsername === "user") && authPassword === savedDemoPassword) {
         const demoUser: User = demoUsername === "admin"
           ? { id: 0, username: "admin", name: "Administrator", role: "admin" }
           : { id: 1, username: "user", name: "Demo Customer", role: "user" };
@@ -846,25 +871,27 @@ export default function HomeScreen() {
   // ======================================
   const renderProduct = ({ item }: { item: Product }) => (
     <Pressable
-      style={[styles.card, hoveredProductId === item.id && styles.cardFocused]}
+      style={[styles.card, !isMobile && styles.cardGrid, !isMobile && { width: width < 1100 ? "31.5%" : "23.5%" }, (item.stock ?? 0) < 1 && styles.cardOutOfStock, hoveredProductId === item.id && styles.cardFocused]}
       onHoverIn={() => setHoveredProductId(item.id)}
       onHoverOut={() => setHoveredProductId(null)}
     >
       <TouchableOpacity
-        style={styles.cardContent}
+        style={[styles.cardContent, !isMobile && styles.cardContentGrid]}
         onPress={() => openProductDetail(item)}
         activeOpacity={0.8}
       >
-        <View style={styles.thumbnailWrap}>
+        <View style={[styles.thumbnailWrap, !isMobile && styles.thumbnailWrapGrid]}>
           <Image
             source={
-              item.image && item.image.startsWith("http")
+              item.image && item.image.startsWith("http") && !failedImageIds.has(item.id)
                 ? { uri: item.image }
                 : { uri: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=600&auto=format&fit=crop" }
             }
-            style={[styles.thumbnail, hoveredProductId === item.id && styles.thumbnailFocused]}
+            style={[styles.thumbnail, !isMobile && styles.thumbnailGrid, hoveredProductId === item.id && styles.thumbnailFocused]}
             resizeMode="cover"
+            onError={() => setFailedImageIds((previous) => new Set(previous).add(item.id))}
           />
+          {(item.stock ?? 0) < 1 && <View style={styles.outOfStockImageShade}><Text style={styles.outOfStockImageText}>หมดแล้ว</Text></View>}
 
           <TouchableOpacity
             style={styles.favoriteButton}
@@ -909,6 +936,7 @@ export default function HomeScreen() {
               <View
                 style={[
                   styles.badge,
+                  (item.stock ?? 0) < 1 && styles.outOfStockBadge,
                   {
                     backgroundColor:
                       item.status === "Available" || item.status === "Active"
@@ -918,7 +946,7 @@ export default function HomeScreen() {
                 ]}
               >
                 <Text style={styles.badgeText}>
-                  {item.status === "Available" ? "Active" : item.status || "Active"}
+                  {(item.stock ?? 0) < 1 ? "หมดแล้ว" : item.status === "Available" ? "Active" : item.status || "Active"}
                 </Text>
               </View>
               {typeof item.stock === "number" && item.stock > 0 && item.stock <= 5 ? (
@@ -931,14 +959,25 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <Text style={styles.productName} numberOfLines={1}>{item.product_name}</Text>
+          <Text style={styles.productName} numberOfLines={2}>{item.product_name}</Text>
 
           {/* ACTION BUTTONS */}
           <View style={styles.actionRow}>
-            {currentUser?.role !== "admin" && <TouchableOpacity style={[styles.cartButton, (item.stock ?? 0) < 1 && styles.deleteButtonDisabled]} onPress={() => addProductToCart(item)} disabled={(item.stock ?? 0) < 1} activeOpacity={0.7}>
-              <Ionicons name="cart-outline" size={14} color="#fff" />
-              <Text style={styles.buttonText}>{(item.stock ?? 0) < 1 ? "หมด" : "ใส่ตะกร้า"}</Text>
-            </TouchableOpacity>}
+            {currentUser?.role !== "admin" && <View style={styles.purchaseControls}>
+              <View style={[styles.quantityControl, (item.stock ?? 0) < 1 && styles.quantityControlDisabled]}>
+                <TouchableOpacity style={styles.quantityButton} onPressIn={(event) => event.stopPropagation()} onPress={() => changeCartQuantity(item, -1)} disabled={(item.stock ?? 0) < 1}>
+                  <Ionicons name="remove" size={15} color={COLORS.primaryDark} />
+                </TouchableOpacity>
+                <Text style={styles.quantityText}>{cartQuantities[item.id] || 1}</Text>
+                <TouchableOpacity style={styles.quantityButton} onPressIn={(event) => event.stopPropagation()} onPress={() => changeCartQuantity(item, 1)} disabled={(item.stock ?? 0) < 1}>
+                  <Ionicons name="add" size={15} color={COLORS.primaryDark} />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={[styles.cartButton, (item.stock ?? 0) < 1 && styles.outOfStockButton]} onPressIn={(event) => event.stopPropagation()} onPress={() => addProductToCart(item)} disabled={(item.stock ?? 0) < 1} activeOpacity={0.7}>
+                <Ionicons name="cart-outline" size={14} color="#fff" />
+                <Text style={styles.buttonText}>{(item.stock ?? 0) < 1 ? "สินค้าหมด" : "ใส่ตะกร้า"}</Text>
+              </TouchableOpacity>
+            </View>}
             {currentUser?.role === "admin" && <>
               <TouchableOpacity style={styles.editButton} onPress={() => openEditProduct(item)} activeOpacity={0.7}>
                 <Ionicons name="create-outline" size={14} color="#fff" />
@@ -960,11 +999,16 @@ export default function HomeScreen() {
   const handleProductListScroll = (event: { nativeEvent: { contentOffset: { y: number } } }) => {
     const offset = event.nativeEvent.contentOffset.y;
     const direction = offset - lastScrollOffset.current;
-    if (Math.abs(direction) < 6) return;
+    const reachedTop = offset <= 4;
+    if (!reachedTop && Math.abs(direction) < 6) return;
     lastScrollOffset.current = offset;
+
+    // Keep the hero hidden during a partial upward scroll; reveal it only at the top.
+    if (!reachedTop && direction <= 0) return;
+
     Animated.timing(carouselVisibility, {
-      toValue: direction > 0 ? 0 : 1,
-      duration: 220,
+      toValue: reachedTop ? 1 : 0,
+      duration: 280,
       useNativeDriver: false,
     }).start();
   };
@@ -1006,8 +1050,26 @@ export default function HomeScreen() {
         <Animated.View style={[styles.backgroundOrb, styles.backgroundOrbThree, {
           opacity: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.28] }),
         }]} />
+        <Animated.View style={[styles.backgroundOrb, styles.backgroundOrbFour, {
+          transform: [
+            { translateX: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [80, -40] }) },
+            { translateY: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [-20, 80] }) },
+          ],
+        }]} />
+        <Animated.View style={[styles.backgroundOrb, styles.backgroundOrbFive, {
+          transform: [
+            { translateX: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [-30, 100] }) },
+            { translateY: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [120, -30] }) },
+          ],
+        }]} />
+        <Animated.View style={[styles.backgroundOrb, styles.backgroundOrbSix, {
+          transform: [
+            { translateX: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [70, -90] }) },
+            { translateY: backgroundMotion.interpolate({ inputRange: [0, 1], outputRange: [40, 150] }) },
+          ],
+        }]} />
       </View>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -1058,23 +1120,28 @@ export default function HomeScreen() {
         opacity: carouselVisibility,
         transform: [{ translateY: carouselVisibility.interpolate({ inputRange: [0, 1], outputRange: [-28, 0] }) }],
       }]}>
-        <Image
-          source={{ uri: activeSlide.image || "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=900&auto=format&fit=crop" }}
-          style={styles.heroImage}
-          resizeMode="cover"
-        />
-        <View style={styles.heroShade} />
-        <View style={styles.heroCopy}>
-          <Text style={styles.heroEyebrow}>CHILLCUP FEATURED</Text>
-          <Text style={styles.heroTitle} numberOfLines={2}>{activeSlide.product_name}</Text>
-          <Text style={styles.heroMeta}>{activeSlide.brand || "ChillCup"} · ฿{Number(activeSlide.price).toLocaleString()}</Text>
-          <TouchableOpacity style={styles.heroButton} onPress={() => openProductDetail(activeSlide)} activeOpacity={0.8}>
-            <Text style={styles.heroButtonText}>ดูรายละเอียด</Text><Ionicons name="arrow-forward" size={16} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.carouselDots}>
-          {slides.map((slide, index) => <Pressable key={slide.id} onPress={() => setSlideIndex(index)} style={[styles.carouselDot, index === slideIndex % slides.length && styles.carouselDotActive]} />)}
-        </View>
+        <Animated.View style={[styles.heroSlideLayer, {
+          opacity: carouselSlideMotion,
+          transform: [{ scale: carouselSlideMotion.interpolate({ inputRange: [0, 1], outputRange: [1.035, 1] }) }],
+        }]}>
+          <Image
+            source={{ uri: activeSlide.image || "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=900&auto=format&fit=crop" }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+          <View style={styles.heroShade} />
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroEyebrow}>CHILLCUP FEATURED</Text>
+            <Text style={styles.heroTitle} numberOfLines={2}>{activeSlide.product_name}</Text>
+            <Text style={styles.heroMeta}>{activeSlide.brand || "ChillCup"} · ฿{Number(activeSlide.price).toLocaleString()}</Text>
+            <TouchableOpacity style={styles.heroButton} onPress={() => openProductDetail(activeSlide)} activeOpacity={0.8}>
+              <Text style={styles.heroButtonText}>ดูรายละเอียด</Text><Ionicons name="arrow-forward" size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.carouselDots}>
+            {slides.map((slide, index) => <Pressable key={slide.id} onPress={() => setSlideIndex(index)} style={[styles.carouselDot, index === slideIndex % slides.length && styles.carouselDotActive]} />)}
+          </View>
+        </Animated.View>
       </Animated.View>}
 
       {/* SEARCH ROW */}
@@ -1113,8 +1180,16 @@ export default function HomeScreen() {
           <Text style={styles.addButtonText}>+ Add</Text>
         </TouchableOpacity>}
 
-        <TouchableOpacity style={styles.refreshButton} onPress={fetchProducts} activeOpacity={0.7}>
-          <Ionicons name="refresh" size={16} color={COLORS.primary} />
+        <TouchableOpacity
+          style={[styles.refreshButton, loading && styles.refreshButtonLoading]}
+          onPress={() => void fetchProducts()}
+          disabled={loading}
+          activeOpacity={0.65}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="รีเฟรชรายการสินค้า"
+        >
+          {loading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="refresh" size={18} color={COLORS.primary} />}
         </TouchableOpacity>
       </View>
 
@@ -1148,8 +1223,11 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
+          key={isMobile ? "products-1" : width < 1100 ? "products-3" : "products-4"}
           data={visibleProducts}
           style={styles.productList}
+          numColumns={isMobile ? 1 : width < 1100 ? 3 : 4}
+          columnWrapperStyle={!isMobile ? styles.productRow : undefined}
           showsVerticalScrollIndicator={true}
           onScroll={handleProductListScroll}
           scrollEventThrottle={16}
@@ -1184,21 +1262,17 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        {currentUser?.role === "admin" && <TouchableOpacity
           style={styles.navItem}
           onPress={() => {
-            if (currentUser?.role !== "admin") {
-              showAlert("สำหรับ Admin เท่านั้น", "ลูกค้าสามารถเลือกซื้อสินค้าจากหน้าร้านได้");
-              return;
-            }
             setActiveTab("Add");
             router.push("/add");
           }}
           activeOpacity={0.7}
         >
-          <Ionicons name="add-outline" size={24} color={currentUser?.role === "admin" ? COLORS.primary : COLORS.textSecondary} />
-          <Text style={[styles.navText, currentUser?.role === "admin" && { color: COLORS.primary, fontWeight: "700" }]}>เพิ่ม</Text>
-        </TouchableOpacity>
+          <Ionicons name="add-outline" size={24} color={COLORS.primary} />
+          <Text style={[styles.navText, { color: COLORS.primary, fontWeight: "700" }]}>เพิ่ม</Text>
+        </TouchableOpacity>}
 
         <TouchableOpacity style={styles.navItem} onPress={() => {
           setActiveTab("Products");
@@ -1622,24 +1696,48 @@ const styles = StyleSheet.create({
     height: 330,
     top: -160,
     right: -80,
-    backgroundColor: "#0A667D",
-    opacity: 0.2,
+    backgroundColor: "#A7E8EA",
+    opacity: 0.28,
   },
   backgroundOrbTwo: {
     width: 280,
     height: 280,
     bottom: 90,
     left: -150,
-    backgroundColor: "#075985",
-    opacity: 0.22,
+    backgroundColor: "#C8EEF0",
+    opacity: 0.3,
   },
   backgroundOrbThree: {
     width: 190,
     height: 190,
     top: "42%",
     right: "18%",
-    backgroundColor: "#22D3EE",
-    opacity: 0.16,
+    backgroundColor: "#D9F7F5",
+    opacity: 0.55,
+  },
+  backgroundOrbFour: {
+    width: 240,
+    height: 240,
+    bottom: -90,
+    right: 24,
+    backgroundColor: "#FFE2C4",
+    opacity: 0.38,
+  },
+  backgroundOrbFive: {
+    width: 150,
+    height: 150,
+    top: "28%",
+    left: "34%",
+    backgroundColor: "#FFD6E7",
+    opacity: 0.3,
+  },
+  backgroundOrbSix: {
+    width: 120,
+    height: 120,
+    bottom: "18%",
+    right: "34%",
+    backgroundColor: "#D9D2FF",
+    opacity: 0.26,
   },
   header: {
     width: "100%",
@@ -1648,7 +1746,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 16,
-    backgroundColor: "rgba(7, 26, 42, 0.94)",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     zIndex: 10,
@@ -1664,6 +1762,9 @@ const styles = StyleSheet.create({
   },
   heroCarousel: {
     height: 220,
+    width: "100%",
+    maxWidth: 1120,
+    alignSelf: "center",
     marginHorizontal: 16,
     marginTop: 14,
     borderRadius: 20,
@@ -1674,6 +1775,10 @@ const styles = StyleSheet.create({
   heroImage: {
     width: "100%",
     height: "100%",
+  },
+  heroSlideLayer: {
+    ...StyleSheet.absoluteFill,
+    overflow: "hidden",
   },
   heroShade: {
     ...StyleSheet.absoluteFill,
@@ -1737,22 +1842,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#A7F3F0",
   },
   brandIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryDark,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#8EEAF0",
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#B9F6F4",
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.primaryDark,
     lineHeight: 20,
   },
   headerSubtitle: {
     fontSize: 11,
-    color: COLORS.textSecondary,
+    color: "#477584",
+    fontWeight: "600",
   },
   iconButton: {
     padding: 6,
@@ -1792,11 +1905,13 @@ const styles = StyleSheet.create({
   },
   searchRow: {
     width: "100%",
+    maxWidth: 1120,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#102B43",
+    backgroundColor: COLORS.surface,
     gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -1808,7 +1923,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#183850",
+    backgroundColor: "#F3F8FA",
     borderRadius: 8,
     paddingHorizontal: 10,
     height: 40,
@@ -1845,7 +1960,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#123B55",
+    backgroundColor: "#EAF5F6",
     ...Platform.select({
       web: { cursor: "pointer" as any },
     }),
@@ -1856,14 +1971,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#123B55",
-    ...Platform.select({
-      web: { cursor: "pointer" as any },
-    }),
+    backgroundColor: "#EAF5F6",
+    borderWidth: 1,
+    borderColor: "#BDEEF2",
+    zIndex: 5,
+    ...Platform.select({ web: { cursor: "pointer" as any } }),
+  },
+  refreshButtonLoading: {
+    opacity: 0.7,
   },
   chipRow: {
-    backgroundColor: "#102B43",
+    backgroundColor: COLORS.surface,
     maxHeight: 44,
+    width: "100%",
+    maxWidth: 1120,
+    alignSelf: "center",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -1871,7 +1993,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#123B55",
+    backgroundColor: "#EAF5F6",
     justifyContent: "center",
     alignSelf: "center",
     marginVertical: 7,
@@ -1898,23 +2020,37 @@ const styles = StyleSheet.create({
   productList: {
     flex: 1,
     width: "100%",
+    maxWidth: 1120,
+    alignSelf: "center",
+  },
+  productRow: {
+    gap: 12,
+    alignItems: "stretch",
   },
   card: {
     width: "100%",
-    backgroundColor: "#102B43",
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     padding: 14,
     marginVertical: 6,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: "#0891B2",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    borderColor: "#73D5E3",
+    shadowColor: "#39B9CC",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
     ...Platform.select({
       web: { transitionDuration: "180ms", cursor: "pointer" as any },
     }),
+  },
+  cardGrid: {
+    flexGrow: 0,
+    flexShrink: 0,
+    marginVertical: 6,
+    padding: 10,
+    minHeight: 382,
+    borderWidth: 2,
   },
   cardFocused: {
     borderColor: COLORS.primaryLight,
@@ -1923,28 +2059,65 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.015 }],
     elevation: 5,
   },
+  cardOutOfStock: {
+    backgroundColor: "#FFF8F3",
+    borderColor: "#F6B38A",
+  },
   cardContent: {
     width: "100%",
     flexDirection: "row",
     alignItems: "flex-start",
   },
+  cardContentGrid: {
+    flex: 1,
+    flexDirection: "column",
+  },
   thumbnailWrap: {
     position: "relative",
     marginRight: 14,
+  },
+  thumbnailWrapGrid: {
+    width: "100%",
+    height: 158,
+    marginRight: 0,
+    marginBottom: 8,
+    overflow: "hidden",
+    borderRadius: 10,
+    backgroundColor: "#EAF5F6",
   },
   thumbnail: {
     width: 85,
     height: 85,
     borderRadius: 10,
-    backgroundColor: "#183850",
+    backgroundColor: "#F3F8FA",
     ...Platform.select({
       web: { transitionDuration: "180ms" },
     }),
+  },
+  thumbnailGrid: {
+    width: "100%",
+    height: 158,
+    marginRight: 0,
   },
   thumbnailFocused: {
     transform: [{ scale: 1.08 }],
     borderWidth: 2,
     borderColor: COLORS.primaryLight,
+  },
+  outOfStockImageShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(190, 72, 35, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  outOfStockImageText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "900",
+    backgroundColor: "#C2410C",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
   favoriteButton: {
     position: "absolute",
@@ -1967,6 +2140,7 @@ const styles = StyleSheet.create({
   },
   cardDetails: {
     flex: 1,
+    minWidth: 0,
   },
   cardTopRow: {
     flexDirection: "row",
@@ -1989,7 +2163,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "#123B55",
+    backgroundColor: "#EAF5F6",
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 6,
@@ -2012,6 +2186,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 20,
   },
+  outOfStockBadge: {
+    backgroundColor: "#C2410C",
+  },
   badgeText: {
     color: "#fff",
     fontSize: 11,
@@ -2031,12 +2208,48 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
     marginTop: 6,
+    minHeight: 42,
+    lineHeight: 20,
   },
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginTop: 10,
+    paddingTop: 10,
+  },
+  purchaseControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  quantityControl: {
+    height: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    backgroundColor: "#F3F8FA",
+    overflow: "hidden",
+  },
+  quantityControlDisabled: {
+    opacity: 0.45,
+  },
+  quantityButton: {
+    width: 28,
+    height: 31,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({ web: { cursor: "pointer" as any } }),
+  },
+  quantityText: {
+    minWidth: 22,
+    textAlign: "center",
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
   editButton: {
     flexDirection: "row",
@@ -2061,6 +2274,10 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { cursor: "pointer" as any },
     }),
+  },
+  outOfStockButton: {
+    backgroundColor: "#C2410C",
+    opacity: 0.7,
   },
   deleteButton: {
     flexDirection: "row",
@@ -2101,7 +2318,7 @@ const styles = StyleSheet.create({
   bottomNav: {
     width: "100%",
     flexDirection: "row",
-    backgroundColor: "#0B2438",
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     paddingVertical: 8,
@@ -2129,7 +2346,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 600,
     maxHeight: "90%",
-    backgroundColor: "#102B43",
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     overflow: "hidden",
   },
@@ -2172,7 +2389,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     color: COLORS.text,
-    backgroundColor: "#183850",
+    backgroundColor: "#F8FBFC",
     fontSize: 14,
   },
   descriptionInput: {
@@ -2202,14 +2419,14 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 450,
     maxHeight: "85%",
-    backgroundColor: "#102B43",
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     overflow: "hidden",
   },
   detailImageBox: {
     width: "100%",
     height: 180,
-    backgroundColor: "#183850",
+    backgroundColor: "#F3F8FA",
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",

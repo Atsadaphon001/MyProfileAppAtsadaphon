@@ -70,7 +70,7 @@ export default function AddScreen() {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
           <Ionicons
             name="arrow-back"
             size={28}

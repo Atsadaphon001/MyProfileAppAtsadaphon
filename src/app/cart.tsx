@@ -96,7 +96,7 @@ export default function CartScreen() {
 
   return <SafeAreaView style={styles.container}>
     <StatusBar barStyle="dark-content" />
-    <View style={styles.header}><TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={25} color={COLORS.text} /></TouchableOpacity><Text style={styles.title}>ตะกร้าสินค้า</Text><View style={{ width: 25 }} /></View>
+    <View style={styles.header}><TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/")}><Ionicons name="arrow-back" size={25} color={COLORS.text} /></TouchableOpacity><Text style={styles.title}>ตะกร้าสินค้า</Text><View style={{ width: 25 }} /></View>
     {!items.length ? <View style={styles.empty}><Ionicons name="cart-outline" size={58} color={COLORS.primary} /><Text style={styles.emptyTitle}>ตะกร้ายังว่าง</Text><TouchableOpacity style={styles.button} onPress={() => router.replace("/")}><Text style={styles.buttonText}>เลือกซื้อสินค้า</Text></TouchableOpacity></View> : <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.sectionTitle}>รายการของคุณ ({items.length})</Text>
       {items.map((item) => <View style={styles.item} key={item.product.id}>

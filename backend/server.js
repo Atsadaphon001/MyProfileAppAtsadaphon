@@ -31,6 +31,10 @@ const pool = mysql.createPool({
 });
 
 const sessions = new Map();
+const demoPasswords = new Map([
+  ["admin", "admin"],
+  ["user", "user"],
+]);
 
 function getSession(req) {
   const token = req.headers.authorization?.replace("Bearer ", "");
@@ -52,6 +56,15 @@ function requireAdmin(req, res, next) {
   const session = getSession(req);
   if (!session || session.role !== "admin") {
     return res.status(403).json({ success: false, message: "เฉพาะผู้ดูแลระบบเท่านั้นที่ทำรายการนี้ได้" });
+  }
+  req.session = session;
+  next();
+}
+
+function requireSession(req, res, next) {
+  const session = getSession(req);
+  if (!session) {
+    return res.status(401).json({ success: false, message: "กรุณาเข้าสู่ระบบก่อน" });
   }
   req.session = session;
   next();
@@ -205,7 +218,7 @@ app.post("/api/login", async (req, res) => {
 
     const demoUsername = String(username).trim().toLowerCase();
     const demoPassword = String(password).trim();
-    if ((demoUsername === "admin" || demoUsername === "user") && demoPassword === demoUsername) {
+    if ((demoUsername === "admin" || demoUsername === "user") && demoPasswords.get(demoUsername) === demoPassword) {
       const demoUser = demoUsername === "admin"
         ? { id: 0, username: "admin", name: "Administrator", role: "admin" }
         : { id: 1, username: "user", name: "Demo Customer", role: "user" };
@@ -261,6 +274,50 @@ app.post("/api/login", async (req, res) => {
       message: "Database Error",
       error: err.message,
     });
+  }
+});
+
+// ===============================
+// CHANGE PASSWORD API
+// ===============================
+app.put("/api/account/password", requireSession, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const cleanCurrentPassword = String(currentPassword || "").trim();
+    const cleanNewPassword = String(newPassword || "").trim();
+
+    if (!cleanCurrentPassword || cleanNewPassword.length < 6) {
+      return res.status(400).json({ success: false, message: "รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร" });
+    }
+
+    const username = String(req.session.username).trim().toLowerCase();
+    if (demoPasswords.has(username)) {
+      if (demoPasswords.get(username) !== cleanCurrentPassword) {
+        return res.status(401).json({ success: false, message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+      }
+      demoPasswords.set(username, cleanNewPassword);
+      return res.json({ success: true, message: "เปลี่ยนรหัสผ่านสำเร็จ" });
+    }
+
+    const [users] = await pool.query("SELECT id, password FROM users WHERE id = ?", [req.session.id]);
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลผู้ใช้" });
+    }
+
+    const storedPassword = String(users[0].password || "");
+    const isMatch = storedPassword.startsWith("$2a$") || storedPassword.startsWith("$2b$")
+      ? await bcrypt.compare(cleanCurrentPassword, storedPassword)
+      : storedPassword === cleanCurrentPassword;
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+    }
+
+    const hashedPassword = await bcrypt.hash(cleanNewPassword, 10);
+    await pool.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, req.session.id]);
+    res.json({ success: true, message: "เปลี่ยนรหัสผ่านสำเร็จ" });
+  } catch (err) {
+    console.error("CHANGE PASSWORD ERROR:", err);
+    res.status(500).json({ success: false, message: "ไม่สามารถเปลี่ยนรหัสผ่านได้" });
   }
 });
 
