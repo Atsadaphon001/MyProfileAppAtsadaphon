@@ -39,6 +39,7 @@ let session: { user: SessionUser; token: string } | null = null;
 let cart: CartItem[] = [];
 let demoOrders: DemoOrder[] = [];
 const stockOverrides = new Map<number, number>();
+const LOCAL_PRODUCT_CATALOG_KEY = "chillcup-local-product-catalog";
 let ordersHydrated = false;
 let stockHydrated = false;
 
@@ -56,6 +57,23 @@ function hydrateStockOverrides() {
 function persistStockOverrides() {
   if (typeof sessionStorage !== "undefined") {
     sessionStorage.setItem("chillcup-stock-overrides", JSON.stringify(Array.from(stockOverrides.entries())));
+  }
+}
+
+// แคตตาล็อกสำหรับโหมดทดลอง: ทำให้หน้าสินค้าและหน้าวิเคราะห์ใช้ข้อมูลชุดเดียวกัน
+export function getLocalProductCatalog<T extends { id: number }>(): T[] | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(LOCAL_PRODUCT_CATALOG_KEY) || "null");
+    return Array.isArray(saved) ? saved as T[] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLocalProductCatalog<T extends { id: number }>(products: T[]) {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(LOCAL_PRODUCT_CATALOG_KEY, JSON.stringify(products));
   }
 }
 
@@ -136,6 +154,12 @@ export function getCartCount() {
 export function getProductStock(productId: number, fallback: number) {
   hydrateStockOverrides();
   return stockOverrides.has(productId) ? stockOverrides.get(productId)! : fallback;
+}
+
+export function setProductStock(productId: number, stock: number) {
+  hydrateStockOverrides();
+  stockOverrides.set(productId, Math.max(0, Math.floor(stock)));
+  persistStockOverrides();
 }
 
 export function decreaseStock(items: CartItem[]) {

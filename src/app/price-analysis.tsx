@@ -1,10 +1,10 @@
 // หน้าวิเคราะห์ระดับราคา
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { API_BASE_URL } from "../constants/api";
-import { getSession } from "../constants/store";
+import { getLocalProductCatalog, getSession } from "../constants/store";
 
 type PriceTier = "Low" | "Mid" | "High";
 
@@ -32,7 +32,7 @@ const TIER_META: Record<PriceTier, { label: string; color: string; background: s
   High: { label: "พรีเมียม", color: "#BE123C", background: "#FFE4E6" },
 };
 
-// [PRICE FALLBACK DATA] ข้อมูลสำรองสำหรับวิเคราะห์เมื่อ API ยังไม่พร้อมใช้งาน
+// [LEGACY DEMO DATA] เก็บไว้สำหรับอ้างอิงเท่านั้น ห้ามนำกลับมาแสดงเมื่อแคตตาล็อกถูกลบจนว่าง
 const fallbackProducts: Product[] = [
   { id: 1, product_name: "ChillCup Arctic 500ml", price: 399, brand: "ChillCup", category: "แก้วเก็บความเย็น", stock: 18 },
   { id: 2, product_name: "FrostPeak Tumbler 900ml", price: 699, brand: "FrostPeak", category: "แก้วเก็บความเย็น", stock: 12 },
@@ -40,6 +40,21 @@ const fallbackProducts: Product[] = [
   { id: 4, product_name: "PolarSip Travel Mug 450ml", price: 489, brand: "PolarSip", category: "แก้วเดินทาง", stock: 15 },
   { id: 5, product_name: "HydroNest Sport Bottle 750ml", price: 559, brand: "HydroNest", category: "ขวดน้ำ", stock: 10 },
   { id: 6, product_name: "MellowCup Pastel 600ml", price: 329, brand: "MellowCup", category: "แก้วเก็บความเย็น", stock: 20 },
+  { id: 7, product_name: "Summit Lock Tumbler 1200ml", price: 899, brand: "Summit Lock", category: "แก้วเก็บความเย็น", stock: 7 },
+  { id: 8, product_name: "UrbanChill Slim 400ml", price: 329, brand: "UrbanChill", category: "แก้วกาแฟ", stock: 16 },
+  { id: 9, product_name: "Alpine Steel Cup 500ml", price: 529, brand: "Alpine", category: "แก้วเก็บความเย็น", stock: 9 },
+  { id: 10, product_name: "SunnyDay Kids Bottle 420ml", price: 299, brand: "SunnyDay", category: "ขวดน้ำ", stock: 22 },
+  { id: 11, product_name: "NightOwl Coffee Tumbler 380ml", price: 379, brand: "NightOwl", category: "แก้วกาแฟ", stock: 14 },
+  { id: 12, product_name: "CoralWave Straw Cup 700ml", price: 649, brand: "CoralWave", category: "แก้วเก็บความเย็น", stock: 11 },
+  { id: 13, product_name: "Terra Ceramic Chill 320ml", price: 429, brand: "Terra", category: "แก้วกาแฟ", stock: 8 },
+  { id: 14, product_name: "AquaVault Flip Bottle 1000ml", price: 759, brand: "AquaVault", category: "ขวดน้ำ", stock: 6 },
+  { id: 15, product_name: "CloudNine Double Wall 550ml", price: 579, brand: "CloudNine", category: "แก้วเก็บความเย็น", stock: 13 },
+  { id: 16, product_name: "VoyageSeal Commuter 420ml", price: 559, brand: "VoyageSeal", category: "แก้วเดินทาง", stock: 10 },
+  { id: 17, product_name: "TrailFlow Active Bottle 800ml", price: 629, brand: "TrailFlow", category: "สายออกกำลังกาย", stock: 14 },
+  { id: 18, product_name: "ChillCap Replacement Lid", price: 189, brand: "ChillCup", category: "อุปกรณ์เสริม", stock: 30 },
+  { id: 19, product_name: "RoamReady Handle Tumbler 600ml", price: 729, brand: "RoamReady", category: "แก้วเดินทาง", stock: 8 },
+  { id: 20, product_name: "PulseGrip Shaker 700ml", price: 479, brand: "PulseGrip", category: "สายออกกำลังกาย", stock: 18 },
+  { id: 21, product_name: "SipSteel Metal Straw Set", price: 149, brand: "ChillCup", category: "อุปกรณ์เสริม", stock: 25 },
 ];
 
 // [K-MEANS PRICE CLUSTER] คำนวณและแบ่งสินค้าออกเป็น 3 ระดับราคา
@@ -87,7 +102,7 @@ export default function PriceAnalysisScreen() {
   const [fallbackNotice, setFallbackNotice] = useState("");
 
   // [LOAD PRICE DATA] โหลดสินค้าและเริ่มวิเคราะห์เมื่อเปิดหน้า Admin
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (getSession()?.user.role !== "admin") {
       router.replace("/");
       return;
@@ -99,18 +114,22 @@ export default function PriceAnalysisScreen() {
         if (!response.ok) throw new Error("ไม่สามารถโหลดข้อมูลสินค้าได้");
         const payload = await response.json();
         const data = Array.isArray(payload) ? payload : payload.data;
-        if (!Array.isArray(data) || data.length === 0) throw new Error("รูปแบบข้อมูลสินค้าไม่ถูกต้อง");
+        if (!Array.isArray(data)) throw new Error("รูปแบบข้อมูลสินค้าไม่ถูกต้อง");
         setResult(clusterPrices(data));
       } catch (loadError) {
-        setResult(clusterPrices(fallbackProducts));
-        setFallbackNotice("เชื่อมต่อ API ไม่ได้ จึงใช้ข้อมูลสินค้าในเครื่องเพื่อแสดงตัวอย่างการวิเคราะห์");
+        const localProducts = getLocalProductCatalog<Product>();
+        // [] เป็นข้อมูลจริงที่แปลว่า Admin ลบสินค้าหมดแล้ว จึงห้ามแทนที่ด้วยข้อมูลตัวอย่าง
+        setResult(clusterPrices(localProducts ?? []));
+        setFallbackNotice(localProducts !== null
+          ? "เชื่อมต่อ API ไม่ได้ จึงใช้แคตตาล็อกล่าสุดในเครื่องเพื่อแสดงการวิเคราะห์"
+          : "เชื่อมต่อ API ไม่ได้ และยังไม่มีแคตตาล็อกในเครื่อง");
       } finally {
         setLoading(false);
       }
     };
 
     void loadProducts();
-  }, []);
+  }, []));
 
   // [PRICE ANALYSIS SUMMARY] คำนวณราคาเฉลี่ยและแจ้งข้อผิดพลาด
   const average = result.products.length
@@ -135,6 +154,7 @@ export default function PriceAnalysisScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {fallbackNotice ? <View style={styles.noticeBox}><Ionicons name="information-circle-outline" size={20} color="#0369A1" /><Text style={styles.noticeText}>{fallbackNotice}</Text></View> : null}
 
+          {result.products.length === 0 ? <View style={styles.emptyState}><Ionicons name="analytics-outline" size={44} color={COLORS.primary} /><Text style={styles.emptyTitle}>ยังไม่มีสินค้าสำหรับวิเคราะห์</Text><Text style={styles.emptyText}>เพิ่มสินค้าในหน้ารายการสินค้า แล้วกลับมาวิเคราะห์ราคาได้ทันที</Text><Pressable style={({ pressed }) => [styles.emptyButton, pressed && styles.emptyButtonPressed]} onPress={() => router.replace("/")}><Ionicons name="add-circle-outline" size={18} color="#fff" /><Text style={styles.emptyButtonText}>ไปเพิ่มสินค้า</Text></Pressable></View> : <>
           {/* [PRICE ANALYSIS HERO] สรุปว่าเป็นการจัดกลุ่มราคาด้วย K-Means */}
           <View style={styles.hero}>
             <View style={styles.heroIcon}><Ionicons name="trending-up-outline" size={27} color="#fff" /></View>
@@ -167,7 +187,7 @@ export default function PriceAnalysisScreen() {
             const meta = TIER_META[tier];
             const tierProducts = result.products.filter((product) => product.priceTier === tier).sort((a, b) => a.price - b.price);
             return <View key={tier} style={styles.listSection}><View style={styles.listHeader}><View style={[styles.tierBadge, { backgroundColor: meta.background }]}><Text style={[styles.tierBadgeText, { color: meta.color }]}>{tier}</Text></View><Text style={styles.listHeaderText}>{meta.label} ({tierProducts.length})</Text></View>{tierProducts.map((product) => <View style={styles.productRow} key={product.id}><View style={styles.productCopy}><Text style={styles.productName} numberOfLines={1}>{product.product_name}</Text><Text style={styles.productMeta}>{product.category || product.brand || "สินค้า ChillCup"}</Text></View><Text style={styles.productPrice}>฿{Number(product.price).toLocaleString()}</Text></View>)}</View>;
-          })}
+          })}</>}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -191,6 +211,12 @@ const styles = StyleSheet.create({
   content: { width: "100%", maxWidth: 920, alignSelf: "center", padding: 18, paddingBottom: 42 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingText: { color: COLORS.muted, fontSize: 14 },
+  emptyState: { alignItems: "center", paddingVertical: 72, paddingHorizontal: 28, backgroundColor: COLORS.white, borderRadius: 18, borderWidth: 1, borderColor: COLORS.line },
+  emptyTitle: { color: COLORS.ink, fontSize: 18, fontWeight: "900", marginTop: 14 },
+  emptyText: { color: COLORS.muted, textAlign: "center", lineHeight: 20, marginTop: 7 },
+  emptyButton: { minHeight: 44, paddingHorizontal: 16, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, marginTop: 18 },
+  emptyButtonPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
+  emptyButtonText: { color: "#fff", fontWeight: "800" },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#FFF1F2", borderRadius: 12, padding: 13, marginBottom: 14 },
   errorText: { color: "#BE123C", flex: 1, fontSize: 13 },
   noticeBox: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#E0F2FE", borderRadius: 12, padding: 13, marginBottom: 14 },

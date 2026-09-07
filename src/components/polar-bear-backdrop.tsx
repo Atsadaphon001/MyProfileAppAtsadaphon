@@ -7,9 +7,25 @@ interface PolarBearBackdropProps {
   showBears?: boolean;
 }
 
+// กระจายตำแหน่งเริ่มต้นให้หิมะเต็มหน้าจอ โดยไม่ต้องใช้รูปภาพเพิ่ม
+const SNOWFLAKES = [
+  { left: "3%", top: -55, size: 17, opacity: 0.44, drift: 24, glyph: "❄" }, { left: "9%", top: 210, size: 25, opacity: 0.35, drift: -34, glyph: "❆" },
+  { left: "15%", top: 65, size: 14, opacity: 0.5, drift: 19, glyph: "✦" }, { left: "21%", top: 390, size: 31, opacity: 0.3, drift: -26, glyph: "❄" },
+  { left: "27%", top: 140, size: 19, opacity: 0.4, drift: 31, glyph: "❆" }, { left: "33%", top: 520, size: 13, opacity: 0.52, drift: -17, glyph: "✦" },
+  { left: "39%", top: 18, size: 29, opacity: 0.28, drift: 29, glyph: "❄" }, { left: "44%", top: 315, size: 16, opacity: 0.48, drift: -22, glyph: "❆" },
+  { left: "50%", top: 110, size: 21, opacity: 0.38, drift: 35, glyph: "❄" }, { left: "55%", top: 470, size: 14, opacity: 0.54, drift: -25, glyph: "✦" },
+  { left: "61%", top: 230, size: 27, opacity: 0.32, drift: 18, glyph: "❆" }, { left: "66%", top: 40, size: 16, opacity: 0.48, drift: -32, glyph: "❄" },
+  { left: "71%", top: 420, size: 22, opacity: 0.36, drift: 23, glyph: "❆" }, { left: "76%", top: 160, size: 12, opacity: 0.56, drift: -15, glyph: "✦" },
+  { left: "81%", top: 580, size: 30, opacity: 0.29, drift: 28, glyph: "❄" }, { left: "86%", top: 280, size: 18, opacity: 0.43, drift: -30, glyph: "❆" },
+  { left: "91%", top: 85, size: 24, opacity: 0.34, drift: 16, glyph: "❄" }, { left: "96%", top: 455, size: 14, opacity: 0.5, drift: -18, glyph: "✦" },
+  { left: "6%", top: 690, size: 22, opacity: 0.34, drift: 27, glyph: "❄" }, { left: "48%", top: 660, size: 17, opacity: 0.45, drift: -20, glyph: "❆" },
+  { left: "73%", top: 720, size: 13, opacity: 0.54, drift: 20, glyph: "✦" }, { left: "31%", top: 760, size: 28, opacity: 0.28, drift: -29, glyph: "❄" },
+] as const;
+
 export function PolarBearBackdrop({ decorationsOnly = false, showBears = true }: PolarBearBackdropProps) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const motion = useRef(new Animated.Value(0)).current;
+  const snowfall = useRef(new Animated.Value(0)).current;
   const desktopBearWidth = Math.min(Math.max(width * 0.25, 250), 410);
   const desktopBearHeight = desktopBearWidth * 1.2;
 
@@ -23,6 +39,12 @@ export function PolarBearBackdrop({ decorationsOnly = false, showBears = true }:
     animation.start();
     return () => animation.stop();
   }, [motion]);
+
+  useEffect(() => {
+    const animation = Animated.loop(Animated.timing(snowfall, { toValue: 1, duration: 11500, useNativeDriver: true }));
+    animation.start();
+    return () => animation.stop();
+  }, [snowfall]);
 
   // รูปหมีจาก assets
   const bearLeft = require("@/assets/images/chillcup-bear-left.png");
@@ -41,7 +63,7 @@ export function PolarBearBackdrop({ decorationsOnly = false, showBears = true }:
 
       {/* หมีซ้าย/ขวา เฉพาะจอใหญ่ (เหมือนเดิม) */}
       {showBears && width >= 900 && <>
-        <Animated.View style={[styles.bearWrap, styles.bearLeft, decorationsOnly && styles.bearEdgeLeft, { width: desktopBearWidth, height: desktopBearHeight }, {
+        <Animated.View style={[styles.bearWrap, styles.bearLeft, decorationsOnly && styles.bearEdgeLeft, { width: desktopBearWidth, height: desktopBearHeight }, decorationsOnly && { left: -desktopBearWidth + 108, top: "56%", opacity: 0.3 }, {
           transform: [
             { translateX: motion.interpolate({ inputRange: [0, 1], outputRange: [-10, 14] }) },
             { translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [0, 14] }) },
@@ -51,7 +73,7 @@ export function PolarBearBackdrop({ decorationsOnly = false, showBears = true }:
           <Image source={bearLeft} style={styles.bearImage} resizeMode="contain" />
           <View style={[styles.bearShadow, styles.bearShadowLeft]} />
         </Animated.View>
-        <Animated.View style={[styles.bearWrap, styles.bearRight, decorationsOnly && styles.bearEdgeRight, { width: desktopBearWidth, height: desktopBearHeight }, {
+        <Animated.View style={[styles.bearWrap, styles.bearRight, decorationsOnly && styles.bearEdgeRight, { width: desktopBearWidth, height: desktopBearHeight }, decorationsOnly && { right: -desktopBearWidth + 108, top: "56%", opacity: 0.3 }, {
           transform: [
             { translateX: motion.interpolate({ inputRange: [0, 1], outputRange: [10, -14] }) },
             { translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [10, -6] }) },
@@ -77,37 +99,8 @@ export function PolarBearBackdrop({ decorationsOnly = false, showBears = true }:
         </Animated.View>
       </>}
 
-      {/* เกล็ดหิมะ */}
-      <Animated.View style={[styles.snowflake, styles.snowflakeOne, {
-        transform: [{ translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [12, -22] }) }],
-      }]}>
-        <Text style={styles.snowText}>❄</Text>
-      </Animated.View>
-      <Animated.View style={[styles.snowflake, styles.snowflakeTwo, {
-        transform: [{ translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [-12, 24] }) }],
-      }]}>
-        <Text style={styles.snowTextSmall}>✦</Text>
-      </Animated.View>
-      <Animated.View style={[styles.snowflake, styles.snowflakeThree, {
-        transform: [{ translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [6, -14] }) }],
-      }]}>
-        <Text style={styles.snowTextTiny}>❆</Text>
-      </Animated.View>
-      <Animated.View style={[styles.snowflake, styles.snowflakeFour, {
-        transform: [{ translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [-18, 18] }) }],
-      }]}>
-        <Text style={styles.snowTextSmall}>❄</Text>
-      </Animated.View>
-      <Animated.View style={[styles.snowflake, styles.snowflakeFive, {
-        transform: [{ translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [14, -18] }) }],
-      }]}>
-        <Text style={styles.snowTextTiny}>✦</Text>
-      </Animated.View>
-      <Animated.View style={[styles.snowflake, styles.snowflakeSix, {
-        transform: [{ translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [-8, 20] }) }],
-      }]}>
-        <Text style={styles.snowText}>❆</Text>
-      </Animated.View>
+      {/* เกล็ดหิมะหลายขนาด ลอยลงและแกว่งคนละทิศทาง */}
+      {SNOWFLAKES.map((flake, index) => <Animated.View key={`${flake.left}-${index}`} style={[styles.snowflake, { left: flake.left, top: flake.top, opacity: snowfall.interpolate({ inputRange: [0, 0.08, 0.9, 1], outputRange: [0, flake.opacity, flake.opacity, 0] }), transform: [{ translateY: snowfall.interpolate({ inputRange: [0, 1], outputRange: [-90, height + 110] }) }, { translateX: snowfall.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, flake.drift, 0] }) }, { rotate: snowfall.interpolate({ inputRange: [0, 1], outputRange: ["0deg", `${index % 2 ? -160 : 160}deg`] }) }] }]}><Text style={[styles.snowText, { fontSize: flake.size }]}>{flake.glyph}</Text></Animated.View>)}
     </View>
   );
 }
@@ -212,13 +205,5 @@ const styles = StyleSheet.create({
   bearImageSmall: { width: "100%", height: "100%" },
   // เกล็ดหิมะ
   snowflake: { position: "absolute", alignItems: "center", justifyContent: "center" },
-  snowflakeOne: { top: "34%", left: 20 },
-  snowflakeTwo: { bottom: "20%", right: "20%" },
-  snowflakeThree: { top: "16%", right: "8%" },
-  snowflakeFour: { top: "54%", left: "14%" },
-  snowflakeFive: { top: "72%", right: "10%" },
-  snowflakeSix: { top: "62%", left: "46%" },
-  snowText: { color: "#6DCBDB", fontSize: 34, opacity: 0.42, textShadowColor: "#FFFFFF", textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } },
-  snowTextSmall: { color: "#93B7E8", fontSize: 27, opacity: 0.38, textShadowColor: "#FFFFFF", textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 } },
-  snowTextTiny: { color: "#7FD4E4", fontSize: 22, opacity: 0.3, textShadowColor: "#FFFFFF", textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 } },
+  snowText: { color: "#3FC4D7", textShadowColor: "#FFFFFF", textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } },
 });

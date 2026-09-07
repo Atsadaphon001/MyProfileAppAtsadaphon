@@ -1,10 +1,10 @@
 // หน้ารายการสินค้า
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PolarBearMark } from "../components/polar-bear-mark";
 import { API_AUTH_URL, API_BASE_URL } from "../constants/api";
-import { addToCart, getCartCount, getProductStock, getSession, setSession } from "../constants/store";
+import { addToCart, getCartCount, getLocalProductCatalog, getProductStock, getSession, saveLocalProductCatalog, setProductStock, setSession } from "../constants/store";
 import { DeleteProductButton } from "./components/delete-product-button";
 import { ProductSearch } from "./components/product-search";
 
@@ -365,6 +365,21 @@ const demoProducts: Product[] = [
   },
 ];
 
+// [LOCKNLOCK SEED] ข้อมูลอ้างอิงจากหมวด Tumbler ของ LocknLock สำหรับใช้ในโปรเจกต์สาธิต
+// รูปภาพเว้นว่างไว้เพื่อให้ผู้ใช้ใส่ภาพที่มีสิทธิ์ใช้งานเอง
+const locknLockSeedProducts: Product[] = [
+  { id: 10001, productCode: "LHC3249", product_name: "Energetic One Touch Tumbler", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "550ml", price: 750, stock: 10, image: "", description: "แก้วเก็บอุณหภูมิฝาเปิดแบบกดครั้งเดียว ความจุ 550 มล.", status: "Available" },
+  { id: 10002, productCode: "LHC4320", product_name: "V Project Flat Table Mug", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "730ml", price: 835, stock: 0, image: "", description: "แก้วทรง Mug สำหรับเครื่องดื่ม ความจุ 730 มล.", status: "Out of Stock" },
+  { id: 10003, productCode: "LHC4246", product_name: "Wanna Be Tumbler Carry", brand: "LocknLock", category: "แก้วเดินทาง", color: "เลือกสีได้", storage: "450ml", price: 695, stock: 12, image: "", description: "กระบอกน้ำพกพาเก็บอุณหภูมิ ความจุ 450 มล.", status: "Available" },
+  { id: 10004, productCode: "LHC4282", product_name: "Metro Mug", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "600ml", price: 770, stock: 10, image: "", description: "แก้ว Metro Mug เก็บอุณหภูมิ ความจุ 600 มล.", status: "Available" },
+  { id: 10005, productCode: "LHC4277S", product_name: "Metro Drive Tumbler", brand: "LocknLock", category: "แก้วเดินทาง", color: "เลือกสีได้", storage: "650ml", price: 795, stock: 8, image: "", description: "แก้ว Tumbler สำหรับพกพา ความจุ 650 มล.", status: "Available" },
+  { id: 10006, productCode: "LHC4274", product_name: "Metro Two Way Tumbler", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "475ml", price: 835, stock: 0, image: "", description: "แก้วเก็บอุณหภูมิ Metro แบบใช้งานได้สองรูปแบบ ความจุ 475 มล.", status: "Out of Stock" },
+  { id: 10007, productCode: "LHC4276", product_name: "Shake It Bottle Pro Stainless", brand: "LocknLock", category: "สายออกกำลังกาย", color: "สเตนเลส", storage: "650ml", price: 780, stock: 9, image: "", description: "กระบอกน้ำสเตนเลสสำหรับเครื่องดื่ม ความจุ 650 มล.", status: "Available" },
+  { id: 10008, productCode: "HAP509", product_name: "Double Wall Cold Cup", brand: "LocknLock", category: "แก้วกาแฟ", color: "เลือกสีได้", storage: "720ml", price: 250, stock: 15, image: "", description: "แก้วน้ำผนังสองชั้นสำหรับเครื่องดื่มเย็น ความจุ 720 มล.", status: "Available" },
+  { id: 10009, productCode: "LHC3292", product_name: "The First One Touch Tumbler", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "480ml", price: 750, stock: 0, image: "", description: "แก้วเก็บอุณหภูมิฝาเปิดแบบกดครั้งเดียว ความจุ 480 มล.", status: "Out of Stock" },
+  { id: 10010, productCode: "LHC4219", product_name: "Metro Mug", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "475ml", price: 695, stock: 0, image: "", description: "แก้ว Metro Mug เก็บอุณหภูมิ ความจุ 475 มล.", status: "Out of Stock" },
+];
+
 const LOCAL_ACCOUNTS_KEY = "chillcup-local-accounts";
 // [DELETED DEMO PRODUCTS] เก็บ ID สินค้า Demo ที่ Admin ลบถาวรในเครื่อง
 const DELETED_DEMO_PRODUCTS_KEY = "chillcup-deleted-demo-products";
@@ -391,6 +406,7 @@ export default function HomeScreen() {
   // [SCREEN SETUP] ขนาดหน้าจอและสถานะการแสดงผลหลัก
   const { width } = useWindowDimensions();
   const isMobile = width < 600;
+  const { category: requestedCategory } = useLocalSearchParams<{ category?: string }>();
   const [webAccessGranted, setWebAccessGranted] = useState(Platform.OS !== "web");
   const [cartCount, setCartCount] = useState(getCartCount());
   const [hoveredProductId, setHoveredProductId] = useState<number | null>(null);
@@ -458,6 +474,15 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [sortOrder, setSortOrder] = useState<"none" | "asc" | "desc">("none");
 
+  // [CATEGORY DEEP LINK] รับหมวดจากหน้าหมวดหมู่ แล้วเปิดรายการที่ตรงกันทันที
+  useEffect(() => {
+    const category = Array.isArray(requestedCategory) ? requestedCategory[0] : requestedCategory;
+    if (category) {
+      setSearchQuery("");
+      setSelectedCategory(category);
+    }
+  }, [requestedCategory]);
+
   // Modal States
     // [MODAL STATE] Modal เพิ่ม แก้ไข และดูรายละเอียดสินค้า
   const [modalVisible, setModalVisible] = useState(false);
@@ -487,10 +512,12 @@ export default function HomeScreen() {
     try {
       if (getSession()?.token === "demo-session") {
         const deletedIds = getDeletedDemoProductIds();
-        const localProducts = demoProducts.filter((product) => !deletedIds.has(product.id)).map((product) => ({
+        const catalog = getLocalProductCatalog<Product>() || demoProducts;
+        const localProducts = catalog.filter((product) => !deletedIds.has(product.id)).map((product) => ({
           ...product,
           stock: getProductStock(product.id, product.stock),
         }));
+        saveLocalProductCatalog(localProducts);
         setProducts(localProducts);
         filterData(searchQuery, localProducts);
         return;
@@ -510,14 +537,49 @@ export default function HomeScreen() {
       setProducts(productsWithLocalStock);
       filterData(searchQuery, productsWithLocalStock);
     } catch (error) {
-      const localProducts = demoProducts.map((product) => ({
+      const cachedCatalog = getLocalProductCatalog<Product>();
+      const localProducts = (cachedCatalog ?? demoProducts).map((product) => ({
         ...product,
         stock: getProductStock(product.id, product.stock),
       }));
+      saveLocalProductCatalog(localProducts);
       setProducts(localProducts);
       filterData(searchQuery, localProducts);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const addLocknLockSeedProducts = async () => {
+    const currentCatalog = getLocalProductCatalog<Product>() ?? products;
+    const existingCodes = new Set(currentCatalog.map((product) => product.productCode));
+    const productsToAdd = locknLockSeedProducts.filter((product) => !existingCodes.has(product.productCode));
+    if (!productsToAdd.length) {
+      showAlert("มีสินค้าอยู่แล้ว", "เพิ่มชุดสินค้า LocknLock ครบแล้ว");
+      return;
+    }
+
+    try {
+      const session = getSession();
+      if (session?.token && session.token !== "demo-session") {
+        for (const product of productsToAdd) {
+          const response = await fetch(API_BASE_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+            body: JSON.stringify(product),
+          });
+          if (!response.ok) throw new Error("ไม่สามารถบันทึกชุดสินค้าไปยังเซิร์ฟเวอร์ได้");
+        }
+        await fetchProducts();
+      } else {
+        const nextCatalog = [...productsToAdd, ...currentCatalog];
+        saveLocalProductCatalog(nextCatalog);
+        setProducts(nextCatalog);
+        filterData(searchQuery, nextCatalog);
+      }
+      showAlert("เพิ่มสินค้าแล้ว", `เพิ่มสินค้า LocknLock ${productsToAdd.length} รายการเรียบร้อย`);
+    } catch (error) {
+      showAlert("เพิ่มสินค้าไม่สำเร็จ", error instanceof Error ? error.message : "กรุณาลองใหม่อีกครั้ง");
     }
   };
 
@@ -814,6 +876,7 @@ export default function HomeScreen() {
     try {
       if (getSession()?.token === "demo-session") {
         saveDeletedDemoProductId(id);
+        saveLocalProductCatalog((getLocalProductCatalog<Product>() || demoProducts).filter((product) => product.id !== id));
         setProducts((prev) => prev.filter((p) => p.id !== id));
         setFilteredProducts((prev) => prev.filter((p) => p.id !== id));
         showAlert("สำเร็จ", "ลบสินค้าเรียบร้อยแล้ว");
@@ -910,11 +973,14 @@ export default function HomeScreen() {
       if (getSession()?.token === "demo-session") {
         if (editingProduct) {
           const updatedProduct = { ...editingProduct, ...payload, id: editingProduct.id };
+          saveLocalProductCatalog((getLocalProductCatalog<Product>() || demoProducts).map((product) => product.id === editingProduct.id ? updatedProduct : product));
+          setProductStock(editingProduct.id, payload.stock);
           setProducts((prev) => prev.map((product) => product.id === editingProduct.id ? updatedProduct : product));
           setFilteredProducts((prev) => prev.map((product) => product.id === editingProduct.id ? updatedProduct : product));
           showAlert("สำเร็จ", "แก้ไขสินค้าเรียบร้อยแล้ว");
         } else {
           const newProduct = { ...payload, id: Date.now(), created_at: new Date().toISOString() } as Product;
+          saveLocalProductCatalog([newProduct, ...(getLocalProductCatalog<Product>() || demoProducts)]);
           setProducts((prev) => [newProduct, ...prev]);
           setFilteredProducts((prev) => [newProduct, ...prev]);
           showAlert("สำเร็จ", "เพิ่มสินค้าเรียบร้อยแล้ว");
@@ -1320,7 +1386,8 @@ export default function HomeScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="ice-cream-outline" size={40} color={COLORS.primaryLight} />
               <Text style={styles.emptyStateTitle}>ไม่พบสินค้า</Text>
-              <Text style={styles.emptyStateText}>ลองเปลี่ยนคำค้นหาหรือหมวดหมู่ดูนะ</Text>
+              <Text style={styles.emptyStateText}>{searchQuery || selectedCategory !== "All" ? "ลองเปลี่ยนคำค้นหาหรือหมวดหมู่ดูนะ" : "เพิ่มชุดสินค้า LocknLock สำหรับเริ่มต้นใช้งานได้ทันที"}</Text>
+              {currentUser?.role === "admin" && !searchQuery && selectedCategory === "All" && <Pressable style={({ pressed }) => [styles.seedButton, pressed && styles.seedButtonPressed]} onPress={() => void addLocknLockSeedProducts()}><Ionicons name="add-circle-outline" size={18} color="#fff" /><Text style={styles.seedButtonText}>เพิ่มสินค้า LocknLock 10 รายการ</Text></Pressable>}
             </View>
           }
         />
@@ -2451,6 +2518,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
   },
+  seedButton: {
+    marginTop: 16,
+    minHeight: 45,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 7,
+  },
+  seedButtonPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
+  seedButtonText: { color: "#fff", fontSize: 13, fontWeight: "800" },
   bottomNav: {
     width: "100%",
     flexDirection: "row",

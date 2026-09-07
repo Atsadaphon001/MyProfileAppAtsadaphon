@@ -59,7 +59,7 @@ export default function CategoriesScreen() {
 
       <View style={styles.list}>
         {categories.map((item) => (
-          <TouchableOpacity key={item.name} style={styles.card} activeOpacity={0.78} onPress={() => router.replace("/")}>
+          <TouchableOpacity key={item.name} style={styles.card} activeOpacity={0.78} onPress={() => router.replace({ pathname: "/", params: { category: item.name } })}>
           <View style={styles.iconWrap}>
             <Ionicons name={item.icon} size={25} color={COLORS.primary} />
           </View>

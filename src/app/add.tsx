@@ -9,7 +9,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity,
+    Pressable,
     View,
 } from "react-native";
 import { API_BASE_URL } from "../constants/api";
@@ -17,12 +17,12 @@ import { getSession } from "../constants/store";
 
 // [ADD PRODUCT] หน้าเพิ่มสินค้าเฉพาะ Admin
 const COLORS = {
-  primary: "#ff0000",
-  background: "rgba(255, 255, 255, 0.88)",
-  surface: "#8cc490",
-  border: "#1900ff",
+  primary: "#00A8B1",
+  background: "#EEF8FA",
+  surface: "#FFFFFF",
+  border: "#D6EDF2",
   text: "#0F172A",
-  textSecondary: "#64748B",
+  textSecondary: "#5B7C89",
 };
 
 export default function AddScreen() {
@@ -31,6 +31,7 @@ export default function AddScreen() {
   const [brand, setBrand] = useState("");
   const [price, setPrice] = useState("");
   const [image, setImage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // [ADMIN ACCESS] ตรวจสิทธิ์ก่อนเปิดหน้าเพิ่มสินค้า
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function AddScreen() {
       return;
     }
 
+    setSaving(true);
     try {
       const session = getSession();
       const response = await fetch(API_BASE_URL, {
@@ -72,7 +74,7 @@ export default function AddScreen() {
       router.replace("/");
     } catch (error) {
       Alert.alert("เกิดข้อผิดพลาด", error instanceof Error ? error.message : "ไม่สามารถเพิ่มสินค้าได้");
-    }
+    } finally { setSaving(false); }
   };
 
   return (
@@ -81,78 +83,84 @@ export default function AddScreen() {
 
       {/* [ADD PRODUCT HEADER] หัวข้อและปุ่มย้อนกลับ */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
+        <Pressable style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]} onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
           <Ionicons
             name="arrow-back"
             size={28}
             color={COLORS.primary}
           />
-        </TouchableOpacity>
+        </Pressable>
 
         <Text style={styles.title}>
-          Add Product
+          เพิ่มสินค้าใหม่
         </Text>
 
-        <View style={{ width: 28 }} />
+        <View style={styles.iconButton}><Ionicons name="cube-outline" size={21} color={COLORS.primary} /></View>
       </View>
 
       {/* [ADD PRODUCT FORM] ช่องกรอกข้อมูลสินค้า */}
       <View style={styles.form}>
 
         <Text style={styles.label}>
-          Product Name
+          ชื่อสินค้า *
         </Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Nike Air Max"
+          placeholder="เช่น ChillCup Classic 500ml"
+          placeholderTextColor="#94A3B8"
           value={name}
           onChangeText={setName}
         />
 
         <Text style={styles.label}>
-          Brand
+          แบรนด์
         </Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Nike"
+          placeholder="เช่น ChillCup"
+          placeholderTextColor="#94A3B8"
           value={brand}
           onChangeText={setBrand}
         />
 
         <Text style={styles.label}>
-          Price
+          ราคา (บาท) *
         </Text>
 
         <TextInput
           style={styles.input}
-          placeholder="3900"
+          placeholder="0"
+          placeholderTextColor="#94A3B8"
           keyboardType="numeric"
           value={price}
           onChangeText={setPrice}
         />
 
         <Text style={styles.label}>
-          Image URL
+          ลิงก์รูปภาพ
         </Text>
 
         <TextInput
           style={styles.input}
           placeholder="https://..."
+          placeholderTextColor="#94A3B8"
           value={image}
           onChangeText={setImage}
         />
 
         {/* [ADD PRODUCT BUTTON] ปุ่มบันทึกสินค้า */}
-        <TouchableOpacity
-          style={styles.button}
-          onPress={saveProduct}
+        <Pressable
+          style={({ pressed }) => [styles.button, (pressed || saving) && styles.buttonPressed]}
+          onPress={() => void saveProduct()}
+          disabled={saving}
         >
+          <Ionicons name={saving ? "sync" : "add-circle-outline"} size={20} color="#fff" />
           <Text style={styles.buttonText}>
-            Save Product
+            {saving ? "กำลังบันทึก..." : "เพิ่มสินค้า"}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
       </View>
     </SafeAreaView>
@@ -171,27 +179,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
+    paddingHorizontal: 20,
+    minHeight: 70,
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
 
   title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: COLORS.primary,
+    fontSize: 19,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F2FAFC",
+  },
+
+  pressed: {
+    opacity: 0.65,
+    transform: [{ scale: 0.94 }],
   },
 
   form: {
-    padding: 20,
+    margin: 20,
+    padding: 18,
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
 
   label: {
-    fontSize: 16,
+    fontSize: 14,
     marginBottom: 8,
     marginTop: 12,
     color: COLORS.text,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   input: {
@@ -200,15 +229,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 15,
     height: 50,
+    color: COLORS.text,
+    backgroundColor: "#F8FCFD",
   },
 
   button: {
     backgroundColor: COLORS.primary,
-    marginTop: 30,
+    marginTop: 22,
     height: 55,
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  buttonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
 
   buttonText: {

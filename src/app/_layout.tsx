@@ -22,9 +22,9 @@ export default function TabLayout() {
         <View style={styles.contentLayer}>
           <Stack initialRouteName="login" screenOptions={{ headerShown: false, animation: 'fade' }} />
         </View>
-        {/* เกล็ดหิมะเป็นฉากหลังเสมอ จึงไม่ทับ header, ข้อความ หรือปุ่ม */}
+        {/* เกล็ดหิมะโปร่งใสอยู่เหนือทุกหน้า แต่ไม่รับการแตะ */}
         <View pointerEvents="none" style={styles.snowLayer}>
-          <PolarBearBackdrop decorationsOnly showBears={false} />
+          <PolarBearBackdrop decorationsOnly />
         </View>
       </View>
     </ThemeProvider>
@@ -45,7 +45,8 @@ const styles = StyleSheet.create({
   },
   snowLayer: {
     ...StyleSheet.absoluteFill,
-    zIndex: 0,
-    opacity: 0.32,
+    zIndex: 2,
+    elevation: 2,
+    opacity: 0.5,
   },
 });

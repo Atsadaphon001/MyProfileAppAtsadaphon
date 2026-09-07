@@ -1,10 +1,10 @@
 // หน้าแรกและแดชบอร์ด
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { API_BASE_URL } from "../constants/api";
-import { getCartCount, getDemoOrders, getSession } from "../constants/store";
+import { API_AUTH_URL, API_BASE_URL } from "../constants/api";
+import { getCartCount, getDemoOrders, getLocalProductCatalog, getProductStock, getSession } from "../constants/store";
 
 // [HOME DASHBOARD] หน้าแรกและสรุปข้อมูลร้านค้า
 const COLORS = { primary: "#00a8b1", primaryDark: "#0E7490", background: "rgba(240, 251, 255, 0.9)", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8" };
@@ -26,29 +26,60 @@ export default function HomeScreen() {
   const [orderCount, setOrderCount] = useState(0);
   const [revenue, setRevenue] = useState(0);
 
-  useEffect(() => {
-    const orders = getDemoOrders();
-    setOrderCount(orders.length);
-    if (!isAdmin) return;
-    setRevenue(orders.reduce((sum, order) => sum + Number(order.total || 0), 0));
-    setProductCount(21);
-    setLowStockCount(demoLowStockProducts.length);
-    setLowStockProducts(demoLowStockProducts);
-    fetch(API_BASE_URL)
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Products API unavailable")))
-      .then((products) => {
-        if (!Array.isArray(products)) return;
-        setProductCount(products.length);
-        const lowStock = products
-          .filter((product) => Number(product.stock) <= 10)
-          .map((product) => ({ name: product.product_name, stock: Number(product.stock) }))
-          .sort((first, second) => first.stock - second.stock);
-        setLowStockCount(lowStock.length);
-        setLowStockProducts(lowStock);
-      })
-      .catch(() => undefined);
-  }, [isAdmin]);
+  type DashboardProduct = { id: number; product_name: string; stock: number };
+  type DashboardOrder = { total: number };
 
+  const applyProductMetrics = useCallback((products: DashboardProduct[]) => {
+    setProductCount(products.length);
+    const lowStock = products
+      .map((product) => ({ ...product, stock: getProductStock(product.id, Number(product.stock) || 0) }))
+      .filter((product) => product.stock <= 10)
+      .map((product) => ({ name: product.product_name, stock: product.stock }))
+      .sort((first, second) => first.stock - second.stock);
+    setLowStockCount(lowStock.length);
+    setLowStockProducts(lowStock);
+  }, []);
+
+  const applyOrderMetrics = useCallback((orders: DashboardOrder[]) => {
+    setOrderCount(orders.length);
+    setRevenue(orders.reduce((sum, order) => sum + Number(order.total || 0), 0));
+  }, []);
+
+  const loadDashboard = useCallback(async () => {
+    const session = getSession();
+    const localProducts = getLocalProductCatalog<DashboardProduct>() || [];
+    const localOrders = getDemoOrders();
+
+    // โหมดทดลองและกรณี API ใช้งานไม่ได้: ใช้ข้อมูลที่ผู้ดูแลแก้ไขล่าสุดในเครื่อง
+    if (session?.token === "demo-session") {
+      applyProductMetrics(localProducts);
+      applyOrderMetrics(localOrders);
+      return;
+    }
+
+    try {
+      const productRequest = fetch(API_BASE_URL);
+      const orderRequest = fetch(`${API_AUTH_URL}/orders`, {
+        headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {},
+      });
+      const [productResponse, orderResponse] = await Promise.all([productRequest, orderRequest]);
+      const products = productResponse.ok ? await productResponse.json() : null;
+      const orders = orderResponse.ok ? await orderResponse.json() : null;
+
+      if (Array.isArray(products)) applyProductMetrics(products);
+      else applyProductMetrics(localProducts);
+      if (Array.isArray(orders)) applyOrderMetrics(orders);
+      else applyOrderMetrics(localOrders);
+    } catch {
+      applyProductMetrics(localProducts);
+      applyOrderMetrics(localOrders);
+    }
+  }, [applyOrderMetrics, applyProductMetrics]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadDashboard();
+  }, [isAdmin, loadDashboard]);
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -61,9 +92,9 @@ export default function HomeScreen() {
           <View style={styles.heroFooter}><View style={styles.liveDot} /><Text style={styles.liveText}>{isAdmin ? "ระบบร้านค้าพร้อมใช้งาน" : "สินค้าใหม่พร้อมให้เลือก"}</Text><Text style={styles.dateText}>{isAdmin ? "TODAY" : "SHOP NOW"}</Text></View>
         </View>
         {isAdmin ? <>
-        <View style={styles.sectionHeading}><View><Text style={styles.sectionEyebrow}>OVERVIEW</Text><Text style={styles.sectionTitle}>ภาพรวมร้านค้า</Text></View><TouchableOpacity style={styles.refreshPill} onPress={() => router.replace("/")}><Ionicons name="arrow-forward" size={15} color={COLORS.primaryDark} /><Text style={styles.refreshText}>ดูร้านค้า</Text></TouchableOpacity></View>
+        <View style={styles.sectionHeading}><View><Text style={styles.sectionEyebrow}>OVERVIEW</Text><Text style={styles.sectionTitle}>ภาพรวมร้านค้า</Text></View><View style={styles.headingActions}><TouchableOpacity style={styles.refreshPill} onPress={() => void loadDashboard()}><Ionicons name="refresh" size={15} color={COLORS.primaryDark} /><Text style={styles.refreshText}>รีเฟรช</Text></TouchableOpacity><TouchableOpacity style={styles.refreshPill} onPress={() => router.replace("/")}><Ionicons name="arrow-forward" size={15} color={COLORS.primaryDark} /><Text style={styles.refreshText}>ดูร้านค้า</Text></TouchableOpacity></View></View>
         <View style={styles.statsGrid}>
-          <StatCard icon="inventory-2" label="สินค้าทั้งหมด" value={productCount || "--"} color={COLORS.primary} />
+          <StatCard icon="inventory-2" label="สินค้าทั้งหมด" value={productCount} color={COLORS.primary} />
           <StatCard icon="receipt-outline" label="คำสั่งซื้อ" value={orderCount} color="#F59E0B" />
           <StatCard icon="trending-down" label="สต็อกใกล้หมด" value={lowStockCount} color="#EF476F" />
           <StatCard icon="cash-outline" label="ยอดขายสะสม" value={`฿${revenue.toLocaleString()}`} color="#7C5CFC" />
@@ -133,6 +164,7 @@ const styles = StyleSheet.create({
   sectionHeading: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 25, marginBottom: 12 },
   sectionEyebrow: { color: COLORS.primary, fontSize: 10, fontWeight: "900", letterSpacing: 1.3 },
   sectionTitle: { color: COLORS.text, fontSize: 20, fontWeight: "900", marginTop: 3 },
+  headingActions: { flexDirection: "row", gap: 7 },
   refreshPill: { flexDirection: "row", gap: 5, alignItems: "center", paddingHorizontal: 11, paddingVertical: 7, borderRadius: 9, backgroundColor: "#E5F8FA" },
   refreshText: { color: COLORS.primaryDark, fontSize: 11, fontWeight: "800" },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
