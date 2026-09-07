@@ -1,3 +1,4 @@
+// หน้าจัดการบัญชี
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -5,9 +6,11 @@ import { Alert, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleS
 import { API_AUTH_URL } from "../constants/api";
 import { clearSession, getSession, updateSessionUser } from "../constants/store";
 
-const COLORS = { bg: "#F4FBFD", white: "#FFFFFF", primary: "#00A8B1", deep: "#0E7490", ink: "#0F2A37", muted: "#63818D", line: "#CBEAF0", ice: "#E8FAFC", danger: "#EF476F" };
+// [ACCOUNT] หน้าจัดการโปรไฟล์และความปลอดภัยของบัญชี
+const COLORS = { bg: "rgba(244, 251, 253, 0.88)", white: "#FFFFFF", primary: "#00A8B1", deep: "#0E7490", ink: "#0F2A37", muted: "#63818D", line: "#CBEAF0", ice: "#E8FAFC", danger: "#EF476F" };
 
 export default function AccountScreen() {
+  // [ACCOUNT STATE] ข้อมูลโปรไฟล์และรหัสผ่าน
   const session = getSession();
   const [name, setName] = useState(session?.user.name || "");
   const [email, setEmail] = useState(session?.user.email || "");
@@ -15,12 +18,15 @@ export default function AccountScreen() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // [ACCOUNT ALERT] แจ้งผลการทำงานของบัญชี
   const notify = (title: string, message: string) => Platform.OS === "web" ? alert(`${title}: ${message}`) : Alert.alert(title, message);
+  // [SAVE PROFILE] บันทึกชื่อและอีเมล
   const saveProfile = () => {
     if (!name.trim() || !email.trim()) { notify("ข้อมูลไม่ครบ", "กรุณากรอกชื่อและอีเมล"); return; }
     updateSessionUser({ name: name.trim(), email: email.trim() });
     notify("บันทึกสำเร็จ", "อัปเดตข้อมูลบัญชีแล้ว");
   };
+  // [CHANGE PASSWORD] เปลี่ยนรหัสผ่าน
   const savePassword = async () => {
     if (!currentPassword || newPassword.length < 6 || newPassword !== confirmPassword) {
       notify("เปลี่ยนรหัสผ่านไม่สำเร็จ", "กรุณากรอกรหัสเดิม รหัสใหม่อย่างน้อย 6 ตัว และยืนยันรหัสให้ตรงกัน");
@@ -31,7 +37,7 @@ export default function AccountScreen() {
       const activeSession = getSession();
       if (!activeSession) return;
 
-      if (activeSession.token === "demo-session") {
+      if (activeSession.token === "demo-session" || activeSession.token === "local-session") {
         const savedPassword = typeof sessionStorage !== "undefined"
           ? sessionStorage.getItem(`chillcup-password-${activeSession.user.username}`) || activeSession.user.username
           : activeSession.user.username;
@@ -55,6 +61,7 @@ export default function AccountScreen() {
       notify("เปลี่ยนรหัสผ่านไม่สำเร็จ", error instanceof Error ? error.message : "ไม่สามารถเปลี่ยนรหัสผ่านได้");
     }
   };
+  // [ACCOUNT LOGOUT] ออกจากระบบ
   const logout = () => {
     if (typeof sessionStorage !== "undefined") { sessionStorage.removeItem("chillcup-session"); sessionStorage.removeItem("chillcup-web-access"); }
     clearSession();
@@ -64,6 +71,7 @@ export default function AccountScreen() {
   if (!session) return <SafeAreaView style={styles.container}><View style={styles.empty}><Ionicons name="person-circle-outline" size={70} color={COLORS.primary} /><Text style={styles.emptyTitle}>กรุณาเข้าสู่ระบบ</Text><Pressable style={styles.primaryButton} onPress={() => router.replace("/login")}><Text style={styles.primaryButtonText}>เข้าสู่ระบบ</Text></Pressable></View></SafeAreaView>;
 
   return <SafeAreaView style={styles.container}>
+    {/* [ACCOUNT HEADER AND PROFILE] ส่วนหัวและข้อมูลส่วนตัว */}
     <StatusBar barStyle="dark-content" />
     <View style={styles.header}><Pressable style={styles.iconButton} onPress={() => router.canGoBack() ? router.back() : router.replace("/")} hitSlop={12}><Ionicons name="arrow-back" size={23} color={COLORS.ink} /></Pressable><View style={styles.headerTitleWrap}><Text style={styles.eyebrow}>CHILLCUP ACCOUNT</Text><Text style={styles.title}>จัดการบัญชี</Text></View><View style={styles.iconButton}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} /></View></View>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>

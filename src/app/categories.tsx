@@ -1,3 +1,4 @@
+// หน้าหมวดหมู่สินค้า
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import {
@@ -10,16 +11,18 @@ import {
 } from "react-native";
 import { getSession } from "../constants/store";
 
+// [CATEGORIES] หน้าหมวดหมู่สินค้า
 const COLORS = {
   primary: "#00A8B1",
   deep: "#0E7490",
-  background: "#F4FBFD",
+  background: "rgba(244, 251, 253, 0.88)",
   border: "#CBEAF0",
   text: "#0F2A37",
   muted: "#63818D",
   ice: "#E8FAFC",
 };
 
+// [CATEGORY DATA] รายการหมวดหมู่และไอคอน
 const categories = [
   { name: "แก้วกาแฟ", description: "จิบกาแฟร้อนหรือเย็นได้ทุกวัน", icon: "cafe-outline" as const },
   { name: "แก้วเก็บความเย็น", description: "รักษาอุณหภูมิได้นานหลายชั่วโมง", icon: "snow-outline" as const },
@@ -30,6 +33,7 @@ const categories = [
 ];
 
 export default function CategoriesScreen() {
+  // [CATEGORY SCREEN] แสดงหมวดหมู่และการนำทาง
   const isAdmin = getSession()?.user.role === "admin";
 
   return (

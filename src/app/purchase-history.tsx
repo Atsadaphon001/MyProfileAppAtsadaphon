@@ -1,11 +1,13 @@
+// หน้าประวัติการสั่งซื้อ
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { DemoOrder, getDemoOrders, OrderStatus } from "../constants/store";
 
+// [PURCHASE HISTORY] ประวัติคำสั่งซื้อของผู้ใช้
 const COLORS = {
-  bg: "#F4FBFD",
+  bg: "rgba(244, 251, 253, 0.88)",
   white: "#FFFFFF",
   primary: "#00A8B1",
   deep: "#0E7490",
@@ -15,6 +17,7 @@ const COLORS = {
   ice: "#E8FAFC",
 };
 
+// [ORDER STATUS] ชื่อสถานะคำสั่งซื้อแต่ละขั้นตอน
 const STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "รับออเดอร์แล้ว",
   processing: "กำลังเตรียมสินค้า",

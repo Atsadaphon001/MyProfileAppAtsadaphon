@@ -1,9 +1,12 @@
+// หน้ารายการสินค้า
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PolarBearMark } from "../components/polar-bear-mark";
 import { API_AUTH_URL, API_BASE_URL } from "../constants/api";
 import { addToCart, getCartCount, getProductStock, getSession, setSession } from "../constants/store";
+import { DeleteProductButton } from "./components/delete-product-button";
+import { ProductSearch } from "./components/product-search";
 
 import {
   ActivityIndicator,
@@ -29,12 +32,13 @@ import {
 // ======================================
 // Backend API Configuration
 // ======================================
+// [THEME] สีและรูปแบบหลักของหน้าสินค้า
 const COLORS = {
-  primary: "#00a8b1",
+  primary: "#00A8B1",
   primaryDark: "#0E7490",
   primaryLight: "#67E8F9",
   accent: "#06B6D4",
-  background: "#F4F9FB",
+  background: "#E9F7FC", // น้ำแข็งอ่อน
   surface: "#FFFFFF",
   border: "#D7E5EA",
   text: "#163247",
@@ -46,6 +50,7 @@ const COLORS = {
 };
 
 interface Product {
+  // [PRODUCT TYPE] โครงสร้างข้อมูลสินค้า
   id: number;
   product_name: string;
   price: number;
@@ -64,6 +69,7 @@ interface Product {
 }
 
 interface ProductForm {
+  // [PRODUCT FORM TYPE] โครงสร้างฟอร์มเพิ่ม/แก้ไขสินค้า
   productCode: string;
   productName: string;
   brand: string;
@@ -79,6 +85,7 @@ interface ProductForm {
 }
 
 interface User {
+  // [USER TYPE] โครงสร้างข้อมูลผู้ใช้งานและสิทธิ์ Admin/User
   id: number;
   username: string;
   email?: string;
@@ -87,6 +94,7 @@ interface User {
 }
 
 const emptyForm: ProductForm = {
+  // [EMPTY PRODUCT FORM] ค่าเริ่มต้นของฟอร์มสินค้า
   productCode: "",
   productName: "",
   brand: "",
@@ -102,6 +110,7 @@ const emptyForm: ProductForm = {
 };
 
 const demoProducts: Product[] = [
+  // [DEMO PRODUCTS] สินค้าตัวอย่างสำหรับโหมดทดลอง/ไม่มี Backend
   {
     id: 1,
     product_name: "ChillCup Arctic 500ml",
@@ -357,8 +366,29 @@ const demoProducts: Product[] = [
 ];
 
 const LOCAL_ACCOUNTS_KEY = "chillcup-local-accounts";
+// [DELETED DEMO PRODUCTS] เก็บ ID สินค้า Demo ที่ Admin ลบถาวรในเครื่อง
+const DELETED_DEMO_PRODUCTS_KEY = "chillcup-deleted-demo-products";
 
+function getDeletedDemoProductIds() {
+  if (typeof localStorage === "undefined") return new Set<number>();
+  try {
+    const saved = JSON.parse(localStorage.getItem(DELETED_DEMO_PRODUCTS_KEY) || "[]");
+    return new Set<number>(Array.isArray(saved) ? saved.map(Number) : []);
+  } catch {
+    return new Set<number>();
+  }
+}
+
+function saveDeletedDemoProductId(id: number) {
+  if (typeof localStorage === "undefined") return;
+  const deletedIds = getDeletedDemoProductIds();
+  deletedIds.add(id);
+  localStorage.setItem(DELETED_DEMO_PRODUCTS_KEY, JSON.stringify([...deletedIds]));
+}
+
+// [LOCAL ACCOUNTS] ชื่อพื้นที่เก็บบัญชีผู้ใช้แบบ Offline
 export default function HomeScreen() {
+  // [SCREEN SETUP] ขนาดหน้าจอและสถานะการแสดงผลหลัก
   const { width } = useWindowDimensions();
   const isMobile = width < 600;
   const [webAccessGranted, setWebAccessGranted] = useState(Platform.OS !== "web");
@@ -372,6 +402,8 @@ export default function HomeScreen() {
   const backgroundMotion = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+      // [WEB ACCESS GUARD] ตรวจสิทธิ์การเข้าหน้าหลักบน Web
+      // [BACKGROUND ANIMATION] แอนิเมชันพื้นหลังของหน้าสินค้า
     if (Platform.OS !== "web") return;
 
     const hasWebAccess = sessionStorage.getItem("chillcup-web-access") === "granted";
@@ -393,15 +425,18 @@ export default function HomeScreen() {
     return () => animation.stop();
   }, [backgroundMotion]);
   // Navigation & Menu Drawer States
+    // [NAVIGATION] สถานะเมนูและแท็บด้านล่าง
   const [activeTab, setActiveTab] = useState<"Home" | "Add" | "Products" | "Categories">("Products");
   const [menuVisible, setMenuVisible] = useState(false);
 
   // Auth States
+    // [LOGIN STATE] สถานะผู้ใช้และ Modal Login/Register
   const [currentUser, setCurrentUser] = useState<User | null>(() => getSession()?.user || null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
 
   // Form States สำหรับ Register/Login
+    // [LOGIN FORM] ช่องกรอก Login และ Register
   const [authUsername, setAuthUsername] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -409,6 +444,7 @@ export default function HomeScreen() {
   const [authLoading, setAuthLoading] = useState(false);
 
   // Products States
+    // [PRODUCT STATE] รายการสินค้า ค้นหา โหลด และลบสินค้า
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -417,11 +453,13 @@ export default function HomeScreen() {
   const [cartQuantities, setCartQuantities] = useState<Record<number, number>>({});
 
   // Extras: Favorites, Categories, Sort
+    // [FILTER STATE] Favorites, หมวดหมู่ และการเรียงราคา
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [sortOrder, setSortOrder] = useState<"none" | "asc" | "desc">("none");
 
   // Modal States
+    // [MODAL STATE] Modal เพิ่ม แก้ไข และดูรายละเอียดสินค้า
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -430,6 +468,9 @@ export default function HomeScreen() {
   const [saving, setSaving] = useState(false);
 
   // Helper Alert
+    // [ALERT] แจ้งเตือนที่รองรับทั้ง Web และ Mobile
+    // [GET PRODUCTS] โหลดรายการสินค้าจาก API หรือ Demo Data
+    // [SEARCH] ค้นหาสินค้าจากชื่อ หมวดหมู่ แบรนด์ หรือรหัสสินค้า
   const showAlert = (title: string, message: string) => {
     if (Platform.OS === "web") {
       alert(`${title}: ${message}`);
@@ -445,7 +486,8 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       if (getSession()?.token === "demo-session") {
-        const localProducts = demoProducts.map((product) => ({
+        const deletedIds = getDeletedDemoProductIds();
+        const localProducts = demoProducts.filter((product) => !deletedIds.has(product.id)).map((product) => ({
           ...product,
           stock: getProductStock(product.id, product.stock),
         }));
@@ -494,14 +536,12 @@ export default function HomeScreen() {
       return;
     }
     const keyword = text.toLowerCase().trim();
-    const filtered = list.filter(
-      (item) =>
-        item.product_name?.toLowerCase().includes(keyword) ||
-        item.category?.toLowerCase().includes(keyword) ||
-        item.brand?.toLowerCase().includes(keyword) ||
-        item.productCode?.toLowerCase().includes(keyword)
-    );
-    setFilteredProducts(filtered);
+    setFilteredProducts(list.filter((item) =>
+      item.product_name?.toLowerCase().includes(keyword) ||
+      item.category?.toLowerCase().includes(keyword) ||
+      item.brand?.toLowerCase().includes(keyword) ||
+      item.productCode?.toLowerCase().includes(keyword)
+    ));
   }
 
   const handleSearch = (text: string) => {
@@ -510,8 +550,9 @@ export default function HomeScreen() {
   };
 
   const toggleFavorite = (id: number) => {
-    setFavoriteIds((prev) => {
-      const next = new Set(prev);
+      // [FAVORITE] เพิ่ม/ลบสินค้าออกจากรายการโปรด
+    setFavoriteIds((previous) => {
+      const next = new Set(previous);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
@@ -519,6 +560,7 @@ export default function HomeScreen() {
   };
 
   const changeCartQuantity = (product: Product, change: number) => {
+      // [CART QUANTITY] เพิ่ม/ลดจำนวนสินค้าก่อนใส่ตะกร้า
     const stock = Math.max(0, product.stock ?? 0);
     setCartQuantities((previous) => {
       const current = previous[product.id] || 1;
@@ -527,6 +569,12 @@ export default function HomeScreen() {
   };
 
   const addProductToCart = (product: Product) => {
+      // [ADD TO CART] เพิ่มสินค้าเข้า Shopping Cart
+    // ผู้เยี่ยมชมดูสินค้าได้ แต่ต้องเข้าสู่ระบบก่อนเริ่มสั่งซื้อ
+    if (!currentUser) {
+      router.replace("/login");
+      return;
+    }
     if ((product.stock ?? 0) < 1) {
       showAlert("สินค้าหมด", "สินค้านี้ไม่มีในสต็อกแล้ว");
       return;
@@ -538,6 +586,7 @@ export default function HomeScreen() {
   };
 
   const categories = ["All", ...Array.from(new Set(products.map((p) => p.category).filter(Boolean) as string[]))];
+  // [CATEGORY FILTER] สร้างตัวเลือกหมวดหมู่จากสินค้าที่โหลดมา
 
   const visibleProducts = filteredProducts
     .filter((p) => selectedCategory === "All" || p.category === selectedCategory)
@@ -566,6 +615,8 @@ export default function HomeScreen() {
   }, [carouselSlideMotion, slideIndex]);
 
   if (!webAccessGranted) {
+      // [LOADING GUARD] แสดงพื้นที่ว่างระหว่างตรวจสิทธิ์ Web
+      // [LOGIN / REGISTER] ตรวจสอบและส่งข้อมูลเข้าสู่ระบบหรือสมัครสมาชิก
     return <View style={styles.loadingContainer} />;
   }
 
@@ -615,8 +666,8 @@ export default function HomeScreen() {
         : demoUsername;
       if ((demoUsername === "admin" || demoUsername === "user") && authPassword === savedDemoPassword) {
         const demoUser: User = demoUsername === "admin"
-          ? { id: 0, username: "admin", name: "Administrator", role: "admin" }
-          : { id: 1, username: "user", name: "Demo Customer", role: "user" };
+          ? { id: 0, username: "admin", email: "admin@gmail.com", name: "Administrator", role: "admin" }
+          : { id: 1, username: "user", email: "user@gmail.com", name: "Demo Customer", role: "user" };
         setSession(demoUser, "demo-session");
         setCurrentUser(demoUser);
         setAuthModalVisible(false);
@@ -673,7 +724,7 @@ export default function HomeScreen() {
         setAuthConfirmPassword("");
       }
     } catch (error) {
-      console.error("Auth error:", error);
+      // Backend เป็น optional สำหรับ demo: ใช้บัญชี/การสมัครในเครื่องเป็น fallback โดยไม่โยน console error
       if (typeof sessionStorage !== "undefined") {
         const savedAccounts = sessionStorage.getItem(LOCAL_ACCOUNTS_KEY);
         const accounts: Array<{ username: string; email: string; password: string }> = savedAccounts
@@ -713,6 +764,13 @@ export default function HomeScreen() {
   };
 
   const handleLogout = () => {
+      // [LOGOUT] ออกจากระบบและล้าง Session
+      // [DELETE PRODUCT] ยืนยันและลบสินค้าโดย Admin
+      // [ADD PRODUCT] เปิดฟอร์มเพิ่มสินค้า
+      // [EDIT PRODUCT] เปิดฟอร์มแก้ไขข้อมูลสินค้า
+      // [PRODUCT DETAIL] เปิดรายละเอียดสินค้า
+      // [SAVE PRODUCT] บันทึกสินค้าใหม่หรือข้อมูลที่แก้ไข
+      // [PRODUCT CARD] แสดงการ์ดสินค้า ปุ่มซื้อ Edit และ Delete
     const logoutAction = () => {
       setCurrentUser(null);
       if (typeof sessionStorage !== "undefined") {
@@ -755,6 +813,7 @@ export default function HomeScreen() {
     setDeletingId(id);
     try {
       if (getSession()?.token === "demo-session") {
+        saveDeletedDemoProductId(id);
         setProducts((prev) => prev.filter((p) => p.id !== id));
         setFilteredProducts((prev) => prev.filter((p) => p.id !== id));
         showAlert("สำเร็จ", "ลบสินค้าเรียบร้อยแล้ว");
@@ -901,7 +960,13 @@ export default function HomeScreen() {
   // ======================================
   // RENDER PRODUCT ITEM
   // ======================================
-  const renderProduct = ({ item }: { item: Product }) => (
+  // [PRODUCT CARD STOCK] แสดงสถานะสต็อกให้เด่นและอ่านง่าย
+  const renderProduct = ({ item }: { item: Product }) => {
+    const stock = Math.max(0, item.stock ?? 0);
+    const stockLabel = stock === 0 ? "สินค้าหมด" : stock <= 5 ? `ใกล้หมด ${stock} ชิ้น` : `มีสินค้า ${stock} ชิ้น`;
+    const stockIcon: keyof typeof Ionicons.glyphMap = stock === 0 ? "close-circle-outline" : stock <= 5 ? "warning-outline" : "cube-outline";
+
+    return (
     <Pressable
       style={[styles.card, !isMobile && styles.cardGrid, !isMobile && { width: width < 1100 ? "31.5%" : "23.5%" }, (item.stock ?? 0) < 1 && styles.cardOutOfStock, hoveredProductId === item.id && styles.cardFocused]}
       onHoverIn={() => setHoveredProductId(item.id)}
@@ -981,13 +1046,10 @@ export default function HomeScreen() {
                   {(item.stock ?? 0) < 1 ? "หมดแล้ว" : item.status === "Available" ? "Active" : item.status || "Active"}
                 </Text>
               </View>
-              {typeof item.stock === "number" && item.stock > 0 && item.stock <= 5 ? (
-                <View style={[styles.badge, styles.lowStockBadge]}>
-                  <Text style={styles.badgeText}>เหลือ {item.stock} ชิ้น</Text>
-                </View>
-              ) : (
-                <Text style={styles.stockText}>Stock: {item.stock ?? 0}</Text>
-              )}
+              <View style={[styles.stockPill, stock === 0 ? styles.stockEmpty : stock <= 5 ? styles.stockLow : styles.stockAvailable]}>
+                <Ionicons name={stockIcon} size={13} color={stock === 0 ? "#B42318" : stock <= 5 ? "#B45309" : "#047857"} />
+                <Text style={[styles.stockPillText, { color: stock === 0 ? "#B42318" : stock <= 5 ? "#B45309" : "#047857" }]}>{stockLabel}</Text>
+              </View>
             </View>
           </View>
 
@@ -1015,20 +1077,21 @@ export default function HomeScreen() {
                 <Ionicons name="create-outline" size={14} color="#fff" />
                 <Text style={styles.buttonText}>Edit</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.deleteButton, deletingId === item.id && styles.deleteButtonDisabled]} onPress={() => handleDeleteConfirm(item)} disabled={deletingId === item.id} activeOpacity={0.7}>
-                {deletingId === item.id ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="trash-outline" size={14} color="#fff" /><Text style={styles.buttonText}>Delete</Text></>}
-              </TouchableOpacity>
+              <DeleteProductButton loading={deletingId === item.id} onPress={() => handleDeleteConfirm(item)} />
             </>}
           </View>
         </View>
       </TouchableOpacity>
     </Pressable>
-  );
+    );
+  };
 
   const slides = visibleProducts.slice(0, 5);
+    // [HERO CAROUSEL] สินค้าเด่นด้านบนและการเลื่อนอัตโนมัติ
   const activeSlide = slides[slideIndex % Math.max(slides.length, 1)];
 
   const handleProductListScroll = (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+      // [PRODUCT SCROLL] ซ่อน/แสดง Hero เมื่อเลื่อนรายการสินค้า
     const offset = event.nativeEvent.contentOffset.y;
     const direction = offset - lastScrollOffset.current;
     const reachedTop = offset <= 4;
@@ -1046,6 +1109,7 @@ export default function HomeScreen() {
   };
 
   const renderInput = (
+      // [PRODUCT FORM INPUT] สร้างช่องกรอกข้อมูลสินค้าแบบใช้ซ้ำ
     label: string,
     field: keyof ProductForm,
     placeholder: string,
@@ -1104,6 +1168,7 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
       {/* HEADER */}
+        {/* [HEADER] แถบด้านบน โปรไฟล์ และตะกร้า */}
       <View style={styles.header}>
         <Pressable
           style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.6 }]}
@@ -1176,36 +1241,15 @@ export default function HomeScreen() {
       </Animated.View>}
 
       {/* SEARCH ROW */}
+        {/* [SEARCH] ช่องค้นหา เรียงราคา เพิ่มสินค้า และรีเฟรช */}
       <View style={[styles.searchRow, isMobile && styles.searchRowMobile]}>
-        <View style={[styles.searchBox, isMobile && styles.searchBoxMobile]}>
-          <Ionicons name="search" size={18} color={COLORS.textSecondary} />
-          <TextInput
-            placeholder="ค้นหาแก้ว ChillCup..."
-            placeholderTextColor={COLORS.textSecondary}
-            style={styles.input}
-            value={searchQuery}
-            onChangeText={handleSearch}
-          />
-          {searchQuery !== "" && (
-            <TouchableOpacity onPress={() => handleSearch("")}>
-              <Ionicons name="close-circle" size={18} color="#94A3B8" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={styles.sortButton}
-          onPress={() =>
-            setSortOrder((prev) => (prev === "none" ? "asc" : prev === "asc" ? "desc" : "none"))
-          }
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={sortOrder === "desc" ? "arrow-down" : sortOrder === "asc" ? "arrow-up" : "swap-vertical"}
-            size={16}
-            color={COLORS.primary}
-          />
-        </TouchableOpacity>
+        <ProductSearch
+          value={searchQuery}
+          isMobile={isMobile}
+          sortOrder={sortOrder}
+          onChangeText={handleSearch}
+          onToggleSort={() => setSortOrder((prev) => (prev === "none" ? "asc" : prev === "asc" ? "desc" : "none"))}
+        />
 
         {currentUser?.role === "admin" && <TouchableOpacity style={styles.addButton} onPress={openAddProduct} activeOpacity={0.8}>
           <Text style={styles.addButtonText}>+ Add</Text>
@@ -1225,6 +1269,7 @@ export default function HomeScreen() {
       </View>
 
       {/* CATEGORY CHIPS */}
+        {/* [CATEGORY FILTER] ปุ่มกรองสินค้าตามหมวดหมู่ */}
       {categories.length > 1 && (
         <ScrollView
           horizontal
@@ -1248,6 +1293,7 @@ export default function HomeScreen() {
       )}
 
       {/* PRODUCT LIST */}
+        {/* [PRODUCT LIST] รายการสินค้าแบบ Grid/List */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -1281,6 +1327,7 @@ export default function HomeScreen() {
       )}
 
       {/* BOTTOM NAVIGATION */}
+        {/* [BOTTOM NAVIGATION] เมนูหน้าแรก เพิ่มสินค้า วิเคราะห์ราคา สินค้า และหมวดหมู่ */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.replace("/home")} activeOpacity={0.7}>
           <Ionicons
@@ -1303,6 +1350,15 @@ export default function HomeScreen() {
         >
           <Ionicons name="add-outline" size={24} color={COLORS.primary} />
           <Text style={[styles.navText, { color: COLORS.primary, fontWeight: "700" }]}>เพิ่ม</Text>
+        </TouchableOpacity>}
+
+        {currentUser?.role === "admin" && <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => router.push("/price-analysis")}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="analytics-outline" size={22} color={COLORS.primary} />
+          <Text style={[styles.navText, { color: COLORS.primary, fontWeight: "700" }]}>วิเคราะห์ราคา</Text>
         </TouchableOpacity>}
 
         <TouchableOpacity style={styles.navItem} onPress={() => {
@@ -1332,6 +1388,7 @@ export default function HomeScreen() {
       </View>
 
       {/* DETAIL MODAL */}
+        {/* [PRODUCT DETAIL MODAL] Modal แสดงรายละเอียดสินค้า */}
       <Modal
         visible={detailModalVisible}
         animationType="fade"
@@ -1407,6 +1464,9 @@ export default function HomeScreen() {
       </Modal>
 
       {/* ADD / EDIT MODAL */}
+        {/* [ADD / EDIT PRODUCT MODAL] Modal เพิ่มหรือแก้ไขสินค้า */}
+        {/* [LOGIN MODAL] Modal Login และ Register */}
+        {/* [MENU DRAWER] เมนูด้านข้างและคำสั่งบัญชี */}
       <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={closeModal}>
         <KeyboardAvoidingView
           style={styles.modalOverlay}
@@ -1712,11 +1772,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
-    backgroundColor: COLORS.background,
+    // โปร่งแสงเพื่อให้ PolarBearBackdrop (ธีมขั้วโลก) แสดงผ่าน
+    backgroundColor: "rgba(233, 247, 252, 0.94)",
   },
   animatedBackground: {
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
+    // ซ่อน orb เดิม ให้ PolarBearBackdrop แสดงแทน
+    opacity: 0,
   },
   backgroundOrb: {
     position: "absolute",
@@ -1751,24 +1814,35 @@ const styles = StyleSheet.create({
     height: 240,
     bottom: -90,
     right: 24,
-    backgroundColor: "#FFE2C4",
-    opacity: 0.38,
+    backgroundColor: "#BFEFF7",
+    opacity: 0.42,
+    // ขอบแสงน้ำแข็ง 3D
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.8)",
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
   },
   backgroundOrbFive: {
     width: 150,
     height: 150,
     top: "28%",
     left: "34%",
-    backgroundColor: "#FFD6E7",
-    opacity: 0.3,
+    backgroundColor: "#D3F4FC",
+    opacity: 0.4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.75)",
   },
   backgroundOrbSix: {
     width: 120,
     height: 120,
     bottom: "18%",
     right: "34%",
-    backgroundColor: "#D9D2FF",
-    opacity: 0.26,
+    backgroundColor: "#E3F9FF",
+    opacity: 0.32,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
   },
   header: {
     width: "100%",
@@ -2237,6 +2311,28 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 4,
   },
+  stockPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 9,
+    marginTop: 5,
+  },
+  stockAvailable: {
+    backgroundColor: "#D1FAE5",
+  },
+  stockLow: {
+    backgroundColor: "#FEF3C7",
+  },
+  stockEmpty: {
+    backgroundColor: "#FEE2E2",
+  },
+  stockPillText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
   lowStockBadge: {
     backgroundColor: COLORS.warning,
     marginTop: 4,
@@ -2253,8 +2349,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: "auto",
+    paddingTop: 14,
+    minHeight: 50,
   },
   purchaseControls: {
     flexDirection: "row",
@@ -2290,12 +2387,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   editButton: {
+    width: 78,
+    height: 36,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     borderRadius: 6,
     ...Platform.select({
       web: { cursor: "pointer" as any },

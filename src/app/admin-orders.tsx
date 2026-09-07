@@ -5,7 +5,7 @@ import { Alert, Image, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet
 import { getDemoOrders, getSession, markDemoOrderPaid } from "../constants/store";
 
 interface Order { id: number; customer_name: string; phone: string; address: string; payment_method: string; slip_url?: string; total: number; status: string; created_at: string; }
-const COLORS = { primary: "#00a8b1", dark: "#0E7490", bg: "#F0FBFF", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8", orange: "#F59E0B" };
+const COLORS = { primary: "#00a8b1", dark: "#0E7490", bg: "rgba(240, 251, 255, 0.88)", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8", orange: "#F59E0B" };
 
 export default function AdminOrdersScreen() {
   const [orders, setOrders] = useState<Order[]>([]);

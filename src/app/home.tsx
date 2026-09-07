@@ -1,3 +1,4 @@
+// หน้าแรกและแดชบอร์ด
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -5,7 +6,9 @@ import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity
 import { API_BASE_URL } from "../constants/api";
 import { getCartCount, getDemoOrders, getSession } from "../constants/store";
 
-const COLORS = { primary: "#00a8b1", primaryDark: "#0E7490", background: "#F0FBFF", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8" };
+// [HOME DASHBOARD] หน้าแรกและสรุปข้อมูลร้านค้า
+const COLORS = { primary: "#00a8b1", primaryDark: "#0E7490", background: "rgba(240, 251, 255, 0.9)", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8" };
+// [LOW STOCK DATA] สินค้าที่มีสต็อกต่ำสำหรับ Dashboard demo
 const demoLowStockProducts = [
   { name: "Summit Lock Tumbler 1200ml", stock: 7 },
   { name: "Alpine Steel Cup 500ml", stock: 9 },
@@ -15,6 +18,7 @@ const demoLowStockProducts = [
 ];
 
 export default function HomeScreen() {
+  // [DASHBOARD STATE] จำนวนสินค้า ออเดอร์ สต็อก และรายได้
   const isAdmin = getSession()?.user.role === "admin";
   const [productCount, setProductCount] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
@@ -68,6 +72,7 @@ export default function HomeScreen() {
         <View style={styles.grid}>
           <TouchableOpacity style={styles.actionCard} onPress={() => router.replace("/")} activeOpacity={0.8}><View style={[styles.actionIcon, { backgroundColor: "#DDF8FA" }]}><MaterialIcons name="inventory-2" size={25} color={COLORS.primary} /></View><Text style={styles.cardTitle}>สินค้าทั้งหมด</Text><Text style={styles.cardText}>ดู แก้ไข และลบรายการสินค้า</Text><Ionicons name="arrow-forward" size={18} color={COLORS.primary} style={styles.cardArrow} /></TouchableOpacity>
           <TouchableOpacity style={styles.actionCard} onPress={() => router.replace("/categories")} activeOpacity={0.8}><View style={[styles.actionIcon, { backgroundColor: "#FFF2D8" }]}><Ionicons name="folder-open-outline" size={25} color="#F59E0B" /></View><Text style={styles.cardTitle}>หมวดหมู่</Text><Text style={styles.cardText}>เลือกดูสินค้าตามหมวดหมู่</Text><Ionicons name="arrow-forward" size={18} color="#F59E0B" style={styles.cardArrow} /></TouchableOpacity>
+          <TouchableOpacity style={styles.actionCard} onPress={() => router.push("/price-analysis")} activeOpacity={0.8}><View style={[styles.actionIcon, { backgroundColor: "#EDE8FF" }]}><Ionicons name="analytics-outline" size={25} color="#7C5CFC" /></View><Text style={styles.cardTitle}>วิเคราะห์ราคา AI/ML</Text><Text style={styles.cardText}>ดูการจัดกลุ่มราคา Low / Mid / High</Text><Ionicons name="arrow-forward" size={18} color="#7C5CFC" style={styles.cardArrow} /></TouchableOpacity>
         </View>
         <View style={styles.quickRow}>
           {isAdmin && <TouchableOpacity style={styles.primaryAction} onPress={() => router.push("/add")} activeOpacity={0.8}><Ionicons name="add-circle-outline" size={22} color="#fff" /><Text style={styles.primaryActionText}>เพิ่มสินค้าใหม่</Text></TouchableOpacity>}
@@ -114,10 +119,10 @@ function NavItem({ icon, label, active, material, onPress }: { icon: string; lab
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: COLORS.background }, // โปร่งแสงให้เห็นหมี PolarBearBackdrop
   content: { padding: 20, paddingBottom: 34 },
-  hero: { backgroundColor: "#DDF8FA", borderRadius: 26, padding: 25, minHeight: 214, justifyContent: "flex-end", overflow: "hidden", borderWidth: 1, borderColor: "#BDEEF2" },
-  heroIcon: { position: "absolute", top: 22, right: 22, width: 54, height: 54, borderRadius: 18, backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center" },
+  hero: { backgroundColor: "rgba(221, 248, 250, 0.92)", borderRadius: 26, padding: 25, minHeight: 214, justifyContent: "flex-end", overflow: "hidden", borderWidth: 2, borderColor: "rgba(255,255,255,0.9)", shadowColor: "#0E7490", shadowOpacity: 0.14, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
+  heroIcon: { position: "absolute", top: 22, right: 22, width: 54, height: 54, borderRadius: 18, backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.8)" },
   kicker: { color: COLORS.primaryDark, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
   title: { color: COLORS.text, fontSize: 30, fontWeight: "800", marginTop: 8 },
   subtitle: { color: COLORS.muted, fontSize: 14, lineHeight: 21, marginTop: 6, maxWidth: 290 },

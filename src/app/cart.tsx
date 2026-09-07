@@ -1,3 +1,4 @@
+// หน้าตะกร้าสินค้าและชำระเงิน
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
@@ -10,9 +11,11 @@ import { API_AUTH_URL } from "../constants/api";
 import { addDemoOrder, clearCart, decreaseStock, getCart, getSession, updateCartQuantity } from "../constants/store";
 import { celebrationStyles } from "./celebration-styles";
 
-const COLORS = { primary: "#00a8b1", dark: "#0E7490", bg: "#F0FBFF", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8", orange: "#F59E0B" };
+// [CART] ตะกร้าสินค้า ข้อมูลจัดส่ง และชำระเงิน
+const COLORS = { primary: "#00a8b1", dark: "#0E7490", bg: "rgba(240, 251, 255, 0.88)", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8", orange: "#F59E0B" };
 
 export default function CartScreen() {
+  // [CART STATE] รายการสินค้า จำนวนเงิน และข้อมูลคำสั่งซื้อ
   const [items, setItems] = useState(getCart());
   const [name, setName] = useState(getSession()?.user.name || "");
   const [phone, setPhone] = useState("");
@@ -24,6 +27,11 @@ export default function CartScreen() {
   const celebrationScale = useRef(new Animated.Value(0.6)).current;
   const celebrationOpacity = useRef(new Animated.Value(0)).current;
   const total = items.reduce((sum, item) => sum + Number(item.product.price) * item.quantity, 0);
+
+  // ป้องกันการเข้าหน้าชำระเงินผ่าน URL เมื่อยังไม่ได้เข้าสู่ระบบ
+  useEffect(() => {
+    if (!getSession()) router.replace("/login");
+  }, []);
 
   useEffect(() => {
     if (!celebrating) return;
@@ -48,6 +56,10 @@ export default function CartScreen() {
     }
   };
   const placeOrder = async () => {
+    if (!getSession()) {
+      router.replace("/login");
+      return;
+    }
     if (!items.length) return;
     if (!name.trim() || !phone.trim() || !address.trim()) {
       const message = "กรุณากรอกชื่อ เบอร์โทร และที่อยู่จัดส่ง";

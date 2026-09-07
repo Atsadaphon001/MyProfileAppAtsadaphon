@@ -1,3 +1,4 @@
+// หน้าติดตามคำสั่งซื้อ
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -18,9 +19,10 @@ import {
     updateDemoOrderStatus,
 } from "../constants/store";
 
+// [TRACK ORDER] หน้าติดตามสถานะคำสั่งซื้อ
 const COLORS = {
   ice: "#E8FAFC",
-  mist: "#F4FBFD",
+  mist: "rgba(244, 251, 253, 0.88)",
   primary: "#00A8B1",
   deep: "#0E7490",
   ink: "#0F2A37",

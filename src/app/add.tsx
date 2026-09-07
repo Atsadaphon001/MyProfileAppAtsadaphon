@@ -1,3 +1,4 @@
+// หน้าเพิ่มสินค้า
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -14,9 +15,10 @@ import {
 import { API_BASE_URL } from "../constants/api";
 import { getSession } from "../constants/store";
 
+// [ADD PRODUCT] หน้าเพิ่มสินค้าเฉพาะ Admin
 const COLORS = {
   primary: "#ff0000",
-  background: "#ffffff",
+  background: "rgba(255, 255, 255, 0.88)",
   surface: "#8cc490",
   border: "#1900ff",
   text: "#0F172A",
@@ -24,15 +26,23 @@ const COLORS = {
 };
 
 export default function AddScreen() {
+  // [ADD PRODUCT STATE] ข้อมูลฟอร์มสินค้าใหม่
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [price, setPrice] = useState("");
   const [image, setImage] = useState("");
 
+  // [ADMIN ACCESS] ตรวจสิทธิ์ก่อนเปิดหน้าเพิ่มสินค้า
   useEffect(() => {
-    if (getSession()?.user.role !== "admin") router.replace("/");
+    const session = getSession();
+    if (!session) {
+      router.replace("/login");
+      return;
+    }
+    if (session.user.role !== "admin") router.replace("/");
   }, []);
 
+  // [SAVE NEW PRODUCT] ส่งข้อมูลสินค้าใหม่ไปยัง Backend
   const saveProduct = async () => {
     if (!name.trim() || !price.trim()) {
       Alert.alert("ข้อมูลไม่ครบ", "กรุณากรอกชื่อสินค้าและราคา");
@@ -69,6 +79,7 @@ export default function AddScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
+      {/* [ADD PRODUCT HEADER] หัวข้อและปุ่มย้อนกลับ */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
           <Ionicons
@@ -85,6 +96,7 @@ export default function AddScreen() {
         <View style={{ width: 28 }} />
       </View>
 
+      {/* [ADD PRODUCT FORM] ช่องกรอกข้อมูลสินค้า */}
       <View style={styles.form}>
 
         <Text style={styles.label}>
@@ -132,6 +144,7 @@ export default function AddScreen() {
           onChangeText={setImage}
         />
 
+        {/* [ADD PRODUCT BUTTON] ปุ่มบันทึกสินค้า */}
         <TouchableOpacity
           style={styles.button}
           onPress={saveProduct}
@@ -146,6 +159,7 @@ export default function AddScreen() {
   );
 }
 
+// [ADD PRODUCT STYLES] รูปแบบหน้าเพิ่มสินค้า
 const styles = StyleSheet.create({
 
   container: {

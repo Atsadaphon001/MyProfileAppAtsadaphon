@@ -1,3 +1,4 @@
+// หน้ารายละเอียดสินค้า
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import {
@@ -11,15 +12,17 @@ import {
     View,
 } from "react-native";
 
+// [PRODUCT DETAIL] หน้ารายละเอียดสินค้า
 const COLORS = {
   primary: "#ff0000",
-  background: "#ffffff",
+  background: "rgba(255, 255, 255, 0.88)",
   border: "#1900ff",
   text: "#0F172A",
   textSecondary: "#64748B",
 };
 
 export default function DetailScreen() {
+  // [DETAIL PARAMS] รับข้อมูลสินค้าจาก Route
   const { name, brand, price, image } =
     useLocalSearchParams();
 
