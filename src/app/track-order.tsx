@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -16,7 +15,7 @@ import {
     DemoOrder,
     getDemoOrders,
     OrderStatus,
-    updateDemoOrderStatus,
+    restartOrderSimulation,
 } from "../constants/store";
 
 // [TRACK ORDER] หน้าติดตามสถานะคำสั่งซื้อ
@@ -44,7 +43,6 @@ const statusIndex = (status: OrderStatus) => STATUS_STEPS.findIndex((step) => st
 export default function TrackOrderScreen() {
   const [orders, setOrders] = useState<DemoOrder[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [moving, setMoving] = useState(false);
 
   const refresh = () => {
     const nextOrders = getDemoOrders();
@@ -54,20 +52,16 @@ export default function TrackOrderScreen() {
 
   useEffect(() => {
     refresh();
+    // อ่านสถานะใหม่เป็นระยะ เพื่อให้การจำลองจาก Admin แสดงแก่ลูกค้าโดยอัตโนมัติ
+    const timer = setInterval(refresh, 1_000);
+    return () => clearInterval(timer);
   }, []);
 
   const selectedOrder = orders.find((order) => order.id === selectedId) || orders[0];
   const currentIndex = selectedOrder ? statusIndex(selectedOrder.status) : -1;
-  const nextStep = currentIndex >= 0 && currentIndex < STATUS_STEPS.length - 1 ? STATUS_STEPS[currentIndex + 1] : null;
-
-  const simulateNext = () => {
-    if (!selectedOrder || !nextStep) return;
-    setMoving(true);
-    updateDemoOrderStatus(selectedOrder.id, nextStep.key);
-    setTimeout(() => {
-      refresh();
-      setMoving(false);
-    }, 320);
+  const restartSimulation = () => {
+    if (!selectedOrder || !restartOrderSimulation(selectedOrder.id)) return;
+    refresh();
   };
 
   return (
@@ -81,7 +75,7 @@ export default function TrackOrderScreen() {
           <Text style={styles.eyebrow}>CHILLCUP CARE</Text>
           <Text style={styles.title}>ติดตามคำสั่งซื้อ</Text>
         </View>
-        <Pressable style={styles.iconButton} onPress={refresh} hitSlop={12}>
+        <Pressable style={styles.iconButton} onPress={restartSimulation} hitSlop={12} accessibilityLabel="เริ่มจำลองสถานะใหม่">
           <Ionicons name="refresh" size={21} color={COLORS.primary} />
         </Pressable>
       </View>
@@ -152,11 +146,9 @@ export default function TrackOrderScreen() {
           </View>
 
           <View style={styles.demoPanel}>
-            <View style={styles.demoIcon}><Ionicons name="sparkles-outline" size={20} color={COLORS.primary} /></View>
-            <View style={styles.demoCopy}><Text style={styles.demoTitle}>โหมดทดลองสถานะ</Text><Text style={styles.demoText}>กดเพื่อดูประสบการณ์เมื่อออเดอร์เดินทางไปแต่ละช่วง</Text></View>
-            <Pressable style={[styles.nextButton, !nextStep && styles.nextButtonDisabled]} onPress={simulateNext} disabled={!nextStep || moving}>{moving ? <ActivityIndicator size="small" color={COLORS.white} /> : <Ionicons name={nextStep ? "arrow-forward" : "checkmark"} size={19} color={COLORS.white} />}</Pressable>
+            <View style={styles.demoIcon}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} /></View>
+            <View style={styles.demoCopy}><Text style={styles.demoTitle}>สถานะดูแลโดยร้านค้า</Text><Text style={styles.demoText}>ร้านค้าจะอัปเดตสถานะคำสั่งซื้อและการจัดส่งให้คุณ</Text></View>
           </View>
-          {nextStep && <Text style={styles.nextHint}>จำลองต่อไป: {nextStep.label}</Text>}
         </ScrollView>
       )}
     </SafeAreaView>

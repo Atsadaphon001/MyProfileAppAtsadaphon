@@ -8,6 +8,8 @@ import { clearSession, getSession, updateSessionUser } from "../constants/store"
 
 // [ACCOUNT] หน้าจัดการโปรไฟล์และความปลอดภัยของบัญชี
 const COLORS = { bg: "rgba(244, 251, 253, 0.88)", white: "#FFFFFF", primary: "#00A8B1", deep: "#0E7490", ink: "#0F2A37", muted: "#63818D", line: "#CBEAF0", ice: "#E8FAFC", danger: "#EF476F" };
+const LOCAL_ACCOUNTS_KEY = "chillcup-local-accounts";
+type LocalAccount = { username: string; email: string; password: string };
 
 export default function AccountScreen() {
   // [ACCOUNT STATE] ข้อมูลโปรไฟล์และรหัสผ่าน
@@ -37,21 +39,35 @@ export default function AccountScreen() {
       const activeSession = getSession();
       if (!activeSession) return;
 
-      if (activeSession.token === "demo-session" || activeSession.token === "local-session") {
+      if (activeSession.token === "demo-session") {
+        const username = activeSession.user.username.trim().toLowerCase();
         const savedPassword = typeof sessionStorage !== "undefined"
-          ? sessionStorage.getItem(`chillcup-password-${activeSession.user.username}`) || activeSession.user.username
-          : activeSession.user.username;
+          ? sessionStorage.getItem(`chillcup-password-${username}`) || username
+          : username;
         if (currentPassword !== savedPassword) throw new Error("รหัสผ่านปัจจุบันไม่ถูกต้อง");
         if (typeof sessionStorage !== "undefined") {
-          sessionStorage.setItem(`chillcup-password-${activeSession.user.username}`, newPassword);
+          sessionStorage.setItem(`chillcup-password-${username}`, newPassword);
         }
+      } else if (activeSession.token === "local-session") {
+        if (typeof sessionStorage === "undefined") throw new Error("ไม่พบพื้นที่จัดเก็บข้อมูลบัญชี");
+
+        const username = activeSession.user.username.trim().toLowerCase();
+        const accounts = JSON.parse(sessionStorage.getItem(LOCAL_ACCOUNTS_KEY) || "[]") as LocalAccount[];
+        const accountIndex = accounts.findIndex((account) => account.username.trim().toLowerCase() === username);
+        if (accountIndex < 0) throw new Error("ไม่พบบัญชีสำหรับเปลี่ยนรหัสผ่าน");
+        if (accounts[accountIndex].password !== currentPassword) throw new Error("รหัสผ่านปัจจุบันไม่ถูกต้อง");
+
+        accounts[accountIndex] = { ...accounts[accountIndex], password: newPassword };
+        sessionStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+        // คงค่าไว้เพื่อรองรับบัญชีที่เคยใช้รูปแบบข้อมูลเดิม
+        sessionStorage.setItem(`chillcup-password-${username}`, newPassword);
       } else {
         const response = await fetch(`${API_AUTH_URL}/account/password`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${activeSession.token}` },
           body: JSON.stringify({ currentPassword, newPassword }),
         });
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.message || "ไม่สามารถเปลี่ยนรหัสผ่านได้");
       }
 

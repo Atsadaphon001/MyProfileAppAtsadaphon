@@ -384,6 +384,13 @@ const LOCAL_ACCOUNTS_KEY = "chillcup-local-accounts";
 // [DELETED DEMO PRODUCTS] เก็บ ID สินค้า Demo ที่ Admin ลบถาวรในเครื่อง
 const DELETED_DEMO_PRODUCTS_KEY = "chillcup-deleted-demo-products";
 
+// ตรวจ cache ที่เคยถูกบันทึกจากข้อมูลทดสอบในฐานข้อมูล (เช่น Smartphone/asd)
+// แล้วกลับไปใช้ชุดสินค้า LocknLock ที่เตรียมไว้แทน
+function isChillCupCatalog(products: Product[]) {
+  const chillCupCategories = new Set(["แก้วเก็บความเย็น", "แก้วเดินทาง", "แก้วกาแฟ", "ขวดน้ำ", "สายออกกำลังกาย", "อุปกรณ์เสริม"]);
+  return products.some((product) => product.id >= 10001 || product.brand === "LocknLock" || chillCupCategories.has(product.category || ""));
+}
+
 function getDeletedDemoProductIds() {
   if (typeof localStorage === "undefined") return new Set<number>();
   try {
@@ -510,18 +517,24 @@ export default function HomeScreen() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      if (getSession()?.token === "demo-session") {
-        const deletedIds = getDeletedDemoProductIds();
-        const catalog = getLocalProductCatalog<Product>() || demoProducts;
-        const localProducts = catalog.filter((product) => !deletedIds.has(product.id)).map((product) => ({
-          ...product,
-          stock: getProductStock(product.id, product.stock),
-        }));
+      // ใช้แคตตาล็อก ChillCup ที่จัดเตรียมไว้ในเครื่องเป็นชุดหลักสำหรับทุกคน
+      // เพื่อไม่ให้ข้อมูลทดสอบในฐานข้อมูล (เช่น asd/iPhone) มาแทนสินค้าที่กรอกไว้
+      const deletedIds = getDeletedDemoProductIds();
+      const cachedCatalog = getLocalProductCatalog<Product>();
+      const catalog = cachedCatalog && isChillCupCatalog(cachedCatalog)
+        ? cachedCatalog
+        : locknLockSeedProducts;
+      const localProducts = catalog
+        .filter((product) => !deletedIds.has(product.id))
+        .map((product) => ({ ...product, stock: getProductStock(product.id, product.stock) }));
+      if (localProducts.length > 0) {
         saveLocalProductCatalog(localProducts);
         setProducts(localProducts);
         filterData(searchQuery, localProducts);
         return;
       }
+
+      // สำรอง: โหลดจาก API เฉพาะกรณีที่ยังไม่มีแคตตาล็อกในเครื่อง
       const response = await fetch(API_BASE_URL);
       if (!response.ok) {
         throw new Error(`ไม่สามารถโหลดข้อมูลสินค้าได้ (HTTP ${response.status})`);
@@ -534,6 +547,7 @@ export default function HomeScreen() {
         ...product,
         stock: getProductStock(product.id, product.stock),
       }));
+      saveLocalProductCatalog(productsWithLocalStock);
       setProducts(productsWithLocalStock);
       filterData(searchQuery, productsWithLocalStock);
     } catch (error) {

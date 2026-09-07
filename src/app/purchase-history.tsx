@@ -1,7 +1,7 @@
 // หน้าประวัติการสั่งซื้อ
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { DemoOrder, getDemoOrders, OrderStatus } from "../constants/store";
 
@@ -35,6 +35,10 @@ const STATUS_ICONS: Record<OrderStatus, keyof typeof Ionicons.glyphMap> = {
 export default function PurchaseHistoryScreen() {
   const [orders, setOrders] = useState<DemoOrder[]>(() => [...getDemoOrders()]);
   const refresh = useCallback(() => setOrders([...getDemoOrders()]), []);
+  useEffect(() => {
+    const timer = setInterval(refresh, 1_000);
+    return () => clearInterval(timer);
+  }, [refresh]);
 
   return (
     <SafeAreaView style={styles.container}>

@@ -8,14 +8,8 @@ import { getCartCount, getDemoOrders, getLocalProductCatalog, getProductStock, g
 
 // [HOME DASHBOARD] หน้าแรกและสรุปข้อมูลร้านค้า
 const COLORS = { primary: "#00a8b1", primaryDark: "#0E7490", background: "rgba(240, 251, 255, 0.9)", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8" };
-// [LOW STOCK DATA] สินค้าที่มีสต็อกต่ำสำหรับ Dashboard demo
-const demoLowStockProducts = [
-  { name: "Summit Lock Tumbler 1200ml", stock: 7 },
-  { name: "Alpine Steel Cup 500ml", stock: 9 },
-  { name: "AquaVault Flip Bottle 1000ml", stock: 6 },
-  { name: "VoyageSeal Commuter 420ml", stock: 10 },
-  { name: "RoamReady Handle Tumbler 600ml", stock: 8 },
-];
+// ใช้เกณฑ์เดียวกับหน้าสินค้า: 0 = หมด, 1–5 = ใกล้หมด
+const LOW_STOCK_LIMIT = 5;
 
 export default function HomeScreen() {
   // [DASHBOARD STATE] จำนวนสินค้า ออเดอร์ สต็อก และรายได้
@@ -33,7 +27,7 @@ export default function HomeScreen() {
     setProductCount(products.length);
     const lowStock = products
       .map((product) => ({ ...product, stock: getProductStock(product.id, Number(product.stock) || 0) }))
-      .filter((product) => product.stock <= 10)
+      .filter((product) => product.stock <= LOW_STOCK_LIMIT)
       .map((product) => ({ name: product.product_name, stock: product.stock }))
       .sort((first, second) => first.stock - second.stock);
     setLowStockCount(lowStock.length);
@@ -109,8 +103,8 @@ export default function HomeScreen() {
           {isAdmin && <TouchableOpacity style={styles.primaryAction} onPress={() => router.push("/add")} activeOpacity={0.8}><Ionicons name="add-circle-outline" size={22} color="#fff" /><Text style={styles.primaryActionText}>เพิ่มสินค้าใหม่</Text></TouchableOpacity>}
           <TouchableOpacity style={isAdmin ? styles.secondaryAction : styles.primaryAction} onPress={() => router.push("/admin-orders")} activeOpacity={0.8}><Ionicons name="receipt-outline" size={21} color={isAdmin ? COLORS.primaryDark : "#fff"} /><Text style={isAdmin ? styles.secondaryActionText : styles.primaryActionText}>ตรวจออเดอร์</Text></TouchableOpacity>
         </View>
-        <View style={styles.alertPanel}><View style={styles.alertIcon}><Ionicons name="notifications-outline" size={21} color="#EF476F" /></View><View style={styles.alertCopy}><Text style={styles.alertTitle}>{lowStockCount > 0 ? `มีสินค้า ${lowStockCount} รายการใกล้หมด` : "สต็อกสินค้าพร้อมจำหน่าย"}</Text><Text style={styles.alertText}>{lowStockCount > 0 ? "รายการที่มีสต็อกไม่เกิน 10 ชิ้น" : "ตรวจสอบสินค้าและอัปเดตข้อมูลได้จากหน้าสินค้า"}</Text></View><Ionicons name="chevron-forward" size={18} color={COLORS.muted} /></View>
-        {lowStockProducts.length > 0 && <View style={styles.lowStockPanel}><View style={styles.lowStockHeader}><View><Text style={styles.sectionEyebrow}>STOCK ALERT</Text><Text style={styles.lowStockTitle}>สินค้าใกล้หมด</Text></View><TouchableOpacity onPress={() => router.replace("/")}><Text style={styles.viewAllText}>ดูทั้งหมด</Text></TouchableOpacity></View>{lowStockProducts.slice(0, 5).map((product) => <View style={styles.lowStockRow} key={product.name}><View style={styles.lowStockProductIcon}><Ionicons name="cube-outline" size={17} color="#EF476F" /></View><Text style={styles.lowStockName} numberOfLines={1}>{product.name}</Text><View style={styles.stockCount}><Text style={styles.stockCountText}>{product.stock}</Text><Text style={styles.stockUnit}>ชิ้น</Text></View></View>)}</View>}
+        <View style={styles.alertPanel}><View style={styles.alertIcon}><Ionicons name="notifications-outline" size={21} color="#EF476F" /></View><View style={styles.alertCopy}><Text style={styles.alertTitle}>{lowStockCount > 0 ? `มีสินค้า ${lowStockCount} รายการต้องตรวจสอบสต็อก` : "สต็อกสินค้าพร้อมจำหน่าย"}</Text><Text style={styles.alertText}>{lowStockCount > 0 ? `สินค้าเหลือไม่เกิน ${LOW_STOCK_LIMIT} ชิ้น รวมสินค้าที่หมดแล้ว` : "ตรวจสอบสินค้าและอัปเดตข้อมูลได้จากหน้าสินค้า"}</Text></View><Ionicons name="chevron-forward" size={18} color={COLORS.muted} /></View>
+        {lowStockProducts.length > 0 && <View style={styles.lowStockPanel}><View style={styles.lowStockHeader}><View><Text style={styles.sectionEyebrow}>STOCK ALERT</Text><Text style={styles.lowStockTitle}>สินค้าใกล้หมด / หมดแล้ว</Text></View><TouchableOpacity onPress={() => router.replace("/")}><Text style={styles.viewAllText}>ดูทั้งหมด</Text></TouchableOpacity></View>{lowStockProducts.slice(0, 5).map((product) => <View style={styles.lowStockRow} key={product.name}><View style={styles.lowStockProductIcon}><Ionicons name={product.stock === 0 ? "close-circle-outline" : "warning-outline"} size={17} color="#EF476F" /></View><Text style={styles.lowStockName} numberOfLines={1}>{product.name}</Text><View style={styles.stockCount}><Text style={styles.stockCountText}>{product.stock === 0 ? "หมดแล้ว" : product.stock}</Text><Text style={styles.stockUnit}>{product.stock === 0 ? "" : "ชิ้น"}</Text></View></View>)}</View>}
         </> : <CustomerHomeContent />}
       </ScrollView>
       <View style={styles.bottomNav}>

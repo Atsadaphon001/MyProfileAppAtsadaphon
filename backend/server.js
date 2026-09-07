@@ -587,10 +587,10 @@ app.delete("/api/products/:id", requireAdmin, async (req, res) => {
 // ===============================
 // CREATE ORDER (ตัดสต็อกแบบ transaction)
 // ===============================
-app.post("/api/orders", async (req, res) => {
+app.post("/api/orders", requireSession, async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const session = getSession(req);
+    const session = req.session;
     const { items, customerName, phone, address, paymentMethod = "cod", slipUrl = null } = req.body;
     if (!Array.isArray(items) || items.length === 0 || !customerName || !phone || !address) {
       return res.status(400).json({ success: false, message: "กรุณากรอกข้อมูลการสั่งซื้อให้ครบถ้วน" });
@@ -688,7 +688,7 @@ app.use((req, res) => {
 // ===============================
 // START SERVER
 // ===============================
-const PORT = Number(process.env.PORT) || 3101;
+const PORT = Number(process.env.PORT) || 3026;
 
 (async () => {
   try {

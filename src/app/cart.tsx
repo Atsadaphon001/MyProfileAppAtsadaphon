@@ -74,8 +74,8 @@ export default function CartScreen() {
     setBusy(true);
     try {
       const session = getSession();
-      const isDemoOrder = session?.token === "demo-session";
-      if (isDemoOrder) {
+      const isLocalOrder = session?.token === "demo-session" || session?.token === "local-session";
+      if (isLocalOrder) {
         decreaseStock(items);
       } else {
         const response = await fetch(`${API_AUTH_URL}/orders`, {
