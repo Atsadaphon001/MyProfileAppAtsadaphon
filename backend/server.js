@@ -43,11 +43,14 @@ function getSession(req) {
 
 function createSession(user) {
   const token = crypto.randomBytes(32).toString("hex");
+  const role = String(user.username || "").trim().toLowerCase() === "admin"
+    ? "admin"
+    : (user.role || "user");
   sessions.set(token, {
     id: user.id || user.user_id,
     username: user.username,
     name: user.name || user.username,
-    role: user.role || "user",
+    role,
   });
   return token;
 }
@@ -70,35 +73,151 @@ function requireSession(req, res, next) {
   next();
 }
 
-async function ensureOrderTables() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      user_id INT NULL,
-      customer_name VARCHAR(120) NOT NULL,
-      phone VARCHAR(30) NOT NULL,
-      address TEXT NOT NULL,
-      payment_method VARCHAR(30) NOT NULL DEFAULT 'cod',
-      slip_url MEDIUMTEXT NULL,
-      total DECIMAL(12,2) NOT NULL,
-      status VARCHAR(30) NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  try { await pool.query("ALTER TABLE orders ADD COLUMN slip_url MEDIUMTEXT NULL"); } catch (err) {
-    if (err.code !== "ER_DUP_FIELDNAME") throw err;
+const defaultSeedProducts = [
+  { id: 10001, productCode: "LHC3249", product_name: "Energetic One Touch Tumbler", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "550ml", price: 750, stock: 10, image: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?q=80&w=600&auto=format&fit=crop", description: "แก้วเก็บอุณหภูมิฝาเปิดแบบกดครั้งเดียว ความจุ 550 มล.", status: "Available" },
+  { id: 10002, productCode: "LHC4320", product_name: "V Project Flat Table Mug", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "730ml", price: 835, stock: 0, image: "https://images.unsplash.com/photo-1594700406777-45f8f9e6f2f3?q=80&w=600&auto=format&fit=crop", description: "แก้วทรง Mug สำหรับเครื่องดื่ม ความจุ 730 มล.", status: "Out of Stock" },
+  { id: 10003, productCode: "LHC4246", product_name: "Wanna Be Tumbler Carry", brand: "LocknLock", category: "แก้วเดินทาง", color: "เลือกสีได้", storage: "450ml", price: 695, stock: 12, image: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=600&auto=format&fit=crop", description: "กระบอกน้ำพกพาเก็บอุณหภูมิ ความจุ 450 มล.", status: "Available" },
+  { id: 10004, productCode: "LHC4282", product_name: "Metro Mug", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "600ml", price: 770, stock: 10, image: "https://images.unsplash.com/photo-1577937927133-66ef06acdf18?q=80&w=600&auto=format&fit=crop", description: "แก้ว Metro Mug เก็บอุณหภูมิ ความจุ 600 มล.", status: "Available" },
+  { id: 10005, productCode: "LHC4277S", product_name: "Metro Drive Tumbler", brand: "LocknLock", category: "แก้วเดินทาง", color: "เลือกสีได้", storage: "650ml", price: 795, stock: 8, image: "https://images.unsplash.com/photo-1544145945-f90425340c7e?q=80&w=600&auto=format&fit=crop", description: "แก้ว Tumbler สำหรับพกพา ความจุ 650 มล.", status: "Available" },
+  { id: 10006, productCode: "LHC4274", product_name: "Metro Two Way Tumbler", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "475ml", price: 835, stock: 0, image: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=600&auto=format&fit=crop", description: "แก้วเก็บอุณหภูมิ Metro แบบใช้งานได้สองรูปแบบ ความจุ 475 มล.", status: "Out of Stock" },
+  { id: 10007, productCode: "LHC4276", product_name: "Shake It Bottle Pro Stainless", brand: "LocknLock", category: "สายออกกำลังกาย", color: "สเตนเลส", storage: "650ml", price: 780, stock: 9, image: "https://images.unsplash.com/photo-1527661591475-527312dd65f5?q=80&w=600&auto=format&fit=crop", description: "กระบอกน้ำสเตนเลสสำหรับเครื่องดื่ม ความจุ 650 มล.", status: "Available" },
+  { id: 10008, productCode: "HAP509", product_name: "Double Wall Cold Cup", brand: "LocknLock", category: "แก้วกาแฟ", color: "เลือกสีได้", storage: "720ml", price: 250, stock: 15, image: "https://images.unsplash.com/photo-1589365278144-c9e705f843ba?q=80&w=600&auto=format&fit=crop", description: "แก้วน้ำผนังสองชั้นสำหรับเครื่องดื่มเย็น ความจุ 720 มล.", status: "Available" },
+  { id: 10009, productCode: "LHC3292", product_name: "The First One Touch Tumbler", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "480ml", price: 750, stock: 0, image: "https://images.unsplash.com/photo-1570784332176-fdd73da66f03?q=80&w=600&auto=format&fit=crop", description: "แก้วเก็บอุณหภูมิฝาเปิดแบบกดครั้งเดียว ความจุ 480 มล.", status: "Out of Stock" },
+  { id: 10010, productCode: "LHC4219", product_name: "Metro Mug", brand: "LocknLock", category: "แก้วเก็บความเย็น", color: "เลือกสีได้", storage: "475ml", price: 695, stock: 0, image: "https://images.unsplash.com/photo-1577937927133-66ef06acdf18?q=80&w=600&auto=format&fit=crop", description: "แก้ว Metro Mug เก็บอุณหภูมิ ความจุ 475 มล.", status: "Out of Stock" },
+];
+
+async function ensureUsersTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        email VARCHAR(255) NULL,
+        password VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NULL,
+        role VARCHAR(50) DEFAULT 'user',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const userCols = [
+      { name: "email", def: "VARCHAR(255) NULL" },
+      { name: "name", def: "VARCHAR(255) NULL" },
+      { name: "role", def: "VARCHAR(50) DEFAULT 'user'" },
+      { name: "created_at", def: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP" },
+    ];
+    for (const col of userCols) {
+      try {
+        await pool.query(`ALTER TABLE users ADD COLUMN ${col.name} ${col.def}`);
+      } catch (err) {
+        if (err.code !== "ER_DUP_FIELDNAME") {
+          // ignore already existing
+        }
+      }
+    }
+
+    // สร้าง admin เริ่มต้นใน MySQL ถ้ายังไม่มี
+    const [existingAdmin] = await pool.query("SELECT id FROM users WHERE LOWER(username) = 'admin'");
+    if (existingAdmin.length === 0) {
+      const adminPass = await bcrypt.hash("admin", 10);
+      await pool.query(
+        "INSERT INTO users (username, email, password, name, role) VALUES (?, ?, ?, ?, 'admin')",
+        ["admin", "admin@gmail.com", adminPass, "Administrator"]
+      );
+      console.log("✅ Created default admin in phpMyAdmin users table");
+    }
+  } catch (err) {
+    console.warn("Users table init warning:", err.message);
   }
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS order_items (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      order_id INT NOT NULL,
-      product_id INT NOT NULL,
-      product_name VARCHAR(255) NOT NULL,
-      price DECIMAL(12,2) NOT NULL,
-      quantity INT NOT NULL,
-      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-    )
-  `);
+}
+
+async function ensureProductsTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_name VARCHAR(255) NOT NULL,
+        productCode VARCHAR(100) NULL,
+        brand VARCHAR(100) NULL,
+        category VARCHAR(100) NULL,
+        price DECIMAL(12,2) NOT NULL DEFAULT 0,
+        stock INT NOT NULL DEFAULT 0,
+        color VARCHAR(100) NULL,
+        storage VARCHAR(100) NULL,
+        ram VARCHAR(100) NULL,
+        image MEDIUMTEXT NULL,
+        description TEXT NULL,
+        status VARCHAR(50) DEFAULT 'Available',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const columnsToAdd = [
+      { name: "product_name", def: "VARCHAR(255) NULL" },
+      { name: "productCode", def: "VARCHAR(100) NULL" },
+      { name: "brand", def: "VARCHAR(100) NULL" },
+      { name: "category", def: "VARCHAR(100) NULL" },
+      { name: "price", def: "DECIMAL(12,2) NOT NULL DEFAULT 0" },
+      { name: "stock", def: "INT NOT NULL DEFAULT 0" },
+      { name: "color", def: "VARCHAR(100) NULL" },
+      { name: "storage", def: "VARCHAR(100) NULL" },
+      { name: "ram", def: "VARCHAR(100) NULL" },
+      { name: "image", def: "MEDIUMTEXT NULL" },
+      { name: "description", def: "TEXT NULL" },
+      { name: "status", def: "VARCHAR(50) DEFAULT 'Available'" },
+      { name: "created_at", def: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP" },
+    ];
+
+    for (const col of columnsToAdd) {
+      try {
+        await pool.query(`ALTER TABLE products ADD COLUMN ${col.name} ${col.def}`);
+      } catch (err) {
+        if (err.code !== "ER_DUP_FIELDNAME") {
+          // column already exists
+        }
+      }
+    }
+
+    try {
+      await pool.query("UPDATE products SET product_name = name WHERE (product_name IS NULL OR product_name = '') AND name IS NOT NULL");
+    } catch (err) {}
+  } catch (err) {
+    console.warn("Products table init warning:", err.message);
+  }
+}
+
+async function ensureOrderTables() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NULL,
+        customer_name VARCHAR(120) NOT NULL,
+        phone VARCHAR(30) NOT NULL,
+        address TEXT NOT NULL,
+        payment_method VARCHAR(30) NOT NULL DEFAULT 'cod',
+        slip_url MEDIUMTEXT NULL,
+        total DECIMAL(12,2) NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    try { await pool.query("ALTER TABLE orders ADD COLUMN slip_url MEDIUMTEXT NULL"); } catch (err) {
+      if (err.code !== "ER_DUP_FIELDNAME") throw err;
+    }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        order_id INT NOT NULL,
+        product_id INT NOT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        price DECIMAL(12,2) NOT NULL,
+        quantity INT NOT NULL
+      )
+    `);
+  } catch (err) {
+    console.warn("Order tables init warning:", err.message);
+  }
 }
 
 // ===============================
@@ -263,7 +382,7 @@ app.post("/api/login", async (req, res) => {
         username: user.username,
         email: user.email || "",
         name: user.name || user.username,
-        role: user.role || "user",
+        role: String(user.username || "").trim().toLowerCase() === "admin" ? "admin" : (user.role || "user"),
       },
       token: createSession(user),
     });
@@ -291,11 +410,18 @@ app.put("/api/account/password", requireSession, async (req, res) => {
     }
 
     const username = String(req.session.username).trim().toLowerCase();
+    const hashedPassword = await bcrypt.hash(cleanNewPassword, 10);
+
     if (demoPasswords.has(username)) {
       if (demoPasswords.get(username) !== cleanCurrentPassword) {
         return res.status(401).json({ success: false, message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
       }
       demoPasswords.set(username, cleanNewPassword);
+      try {
+        await pool.query("UPDATE users SET password = ? WHERE LOWER(username) = ?", [hashedPassword, username]);
+      } catch (err) {
+        console.warn("MySQL user password update note:", err.message);
+      }
       return res.json({ success: true, message: "เปลี่ยนรหัสผ่านสำเร็จ" });
     }
 
@@ -325,24 +451,23 @@ app.put("/api/account/password", requireSession, async (req, res) => {
 // GET PRODUCTS (รองรับการค้นหาผ่าน ?q=)
 // ===============================
 app.get("/api/products", async (req, res) => {
+  const searchQuery = req.query.q ? String(req.query.q).trim() : "";
   try {
-    const searchQuery = req.query.q ? String(req.query.q).trim() : "";
-    
     let sql = `
       SELECT
         id,
-        product_name,
-        productCode,
-        brand,
-        category,
-        price,
-        stock,
-        color,
-        storage,
-        ram,
-        COALESCE(image,'') AS image,
-        COALESCE(description,'') AS description,
-        COALESCE(status,'Available') AS status,
+        COALESCE(product_name, '') AS product_name,
+        COALESCE(productCode, '') AS productCode,
+        COALESCE(brand, '') AS brand,
+        COALESCE(category, '') AS category,
+        COALESCE(price, 0) AS price,
+        COALESCE(stock, 0) AS stock,
+        COALESCE(color, '') AS color,
+        COALESCE(storage, '') AS storage,
+        COALESCE(ram, '') AS ram,
+        COALESCE(image, '') AS image,
+        COALESCE(description, '') AS description,
+        COALESCE(status, 'Available') AS status,
         created_at
       FROM products
     `;
@@ -359,15 +484,33 @@ app.get("/api/products", async (req, res) => {
 
     const [rows] = await pool.query(sql, queryParams);
 
-    res.json(rows);
-  } catch (err) {
-    console.error("GET PRODUCTS ERROR:", err);
+    if (rows && rows.length > 0) {
+      return res.json(rows);
+    }
 
-    res.status(500).json({
-      success: false,
-      message: "Database Error",
-      error: err.message,
-    });
+    // หากยังไม่มีสินค้าในตาราง ให้ส่งรายการเริ่มต้นกลับไป
+    const filteredSeed = searchQuery
+      ? defaultSeedProducts.filter((p) =>
+          p.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.productCode?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : defaultSeedProducts;
+    res.json(filteredSeed);
+  } catch (err) {
+    console.warn("GET PRODUCTS DB ERROR (Fallback to seed products):", err.message);
+
+    // Fallback เมื่อติดต่อ MySQL ไม่ได้ เพื่อไม่ให้หน้าแอปล่มด้วย HTTP 500
+    const filteredSeed = searchQuery
+      ? defaultSeedProducts.filter((p) =>
+          p.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.productCode?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : defaultSeedProducts;
+    res.json(filteredSeed);
   }
 });
 
@@ -456,7 +599,7 @@ app.put("/api/products/:id", requireAdmin, async (req, res) => {
   try {
     const productId = Number(req.params.id);
 
-    if (!Number.isInteger(productId) || productId <= 0) {
+    if (!Number.isInteger(productId) || productId < 0) {
       return res.status(400).json({
         success: false,
         message: "Invalid product id",
@@ -550,7 +693,7 @@ app.delete("/api/products/:id", requireAdmin, async (req, res) => {
   try {
     const productId = Number(req.params.id);
 
-    if (!Number.isInteger(productId) || productId <= 0) {
+    if (!Number.isInteger(productId) || productId < 0) {
       return res.status(400).json({
         success: false,
         message: "Invalid product id",
@@ -698,8 +841,10 @@ const PORT = Number(process.env.PORT) || 3026;
     const [rows] = await conn.query("SELECT DATABASE() AS db");
     console.log("Current Database:", rows[0].db);
 
+    await ensureUsersTable();
+    await ensureProductsTable();
     await ensureOrderTables();
-    console.log("Order tables ready");
+    console.log("Database tables ready");
 
     conn.release();
   } catch (err) {
