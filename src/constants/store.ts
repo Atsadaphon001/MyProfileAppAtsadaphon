@@ -128,7 +128,11 @@ function persistDemoOrders() {
 }
 
 export function setSession(user: SessionUser, token = "") {
-  session = { user, token };
+  const normalizedUsername = user.username?.trim().toLowerCase();
+  session = {
+    user: { ...user, role: normalizedUsername === "admin" ? "admin" : (user.role || "user") },
+    token,
+  };
   // บังคับให้โหลดตะกร้าของบัญชีที่เพิ่งเข้าสู่ระบบ ไม่ปะปนกับบัญชีก่อนหน้า
   cartOwnerKey = undefined;
   if (typeof sessionStorage !== "undefined") {

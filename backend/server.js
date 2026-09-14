@@ -181,6 +181,7 @@ async function ensureProductsTable() {
     try {
       await pool.query("UPDATE products SET product_name = name WHERE (product_name IS NULL OR product_name = '') AND name IS NOT NULL");
     } catch (err) {}
+
   } catch (err) {
     console.warn("Products table init warning:", err.message);
   }
@@ -438,8 +439,8 @@ app.put("/api/account/password", requireSession, async (req, res) => {
       return res.status(401).json({ success: false, message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
     }
 
-    const hashedPassword = await bcrypt.hash(cleanNewPassword, 10);
-    await pool.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, req.session.id]);
+    const newHashedPassword = await bcrypt.hash(cleanNewPassword, 10);
+    await pool.query("UPDATE users SET password = ? WHERE id = ?", [newHashedPassword, req.session.id]);
     res.json({ success: true, message: "เปลี่ยนรหัสผ่านสำเร็จ" });
   } catch (err) {
     console.error("CHANGE PASSWORD ERROR:", err);
@@ -451,6 +452,7 @@ app.put("/api/account/password", requireSession, async (req, res) => {
 // GET PRODUCTS (รองรับการค้นหาผ่าน ?q=)
 // ===============================
 app.get("/api/products", async (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   const searchQuery = req.query.q ? String(req.query.q).trim() : "";
   try {
     let sql = `
@@ -483,34 +485,10 @@ app.get("/api/products", async (req, res) => {
     sql += ` ORDER BY id ASC`;
 
     const [rows] = await pool.query(sql, queryParams);
-
-    if (rows && rows.length > 0) {
-      return res.json(rows);
-    }
-
-    // หากยังไม่มีสินค้าในตาราง ให้ส่งรายการเริ่มต้นกลับไป
-    const filteredSeed = searchQuery
-      ? defaultSeedProducts.filter((p) =>
-          p.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.productCode?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : defaultSeedProducts;
-    res.json(filteredSeed);
+    return res.json(rows);
   } catch (err) {
-    console.warn("GET PRODUCTS DB ERROR (Fallback to seed products):", err.message);
-
-    // Fallback เมื่อติดต่อ MySQL ไม่ได้ เพื่อไม่ให้หน้าแอปล่มด้วย HTTP 500
-    const filteredSeed = searchQuery
-      ? defaultSeedProducts.filter((p) =>
-          p.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.productCode?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : defaultSeedProducts;
-    res.json(filteredSeed);
+    console.warn("GET PRODUCTS DB ERROR:", err.message);
+    res.status(500).json({ success: false, message: "Database Error", error: err.message });
   }
 });
 
