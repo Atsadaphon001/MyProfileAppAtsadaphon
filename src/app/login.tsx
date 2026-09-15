@@ -79,7 +79,8 @@ export default function LoginScreen() {
       }
       if (data.user) setSession(data.user, data.token || "");
       if (Platform.OS === "web") sessionStorage.setItem("chillcup-web-access", "granted");
-      router.replace("/");
+      // เข้าสู่ระบบสำเร็จให้เริ่มที่หน้าแรกของแอปเสมอ
+      router.replace("/home");
     } catch (error) {
       // [OFFLINE LOGIN FALLBACK] Login บัญชีที่สมัครในเครื่องได้เมื่อ API ล่ม
       if (typeof sessionStorage !== "undefined") {
@@ -89,7 +90,8 @@ export default function LoginScreen() {
         if (localAccount && localAccount.password === password) {
           setSession({ id: Date.now(), username: localAccount.username, name: localAccount.username, email: localAccount.email, role: "user" }, "local-session");
           sessionStorage.setItem("chillcup-web-access", "granted");
-          router.replace("/");
+          // บัญชีในเครื่องก็ต้องเริ่มที่หน้าแรกเช่นเดียวกัน
+          router.replace("/home");
           return;
         }
       }

@@ -1014,7 +1014,11 @@ export default function HomeScreen() {
             style={[styles.thumbnail, !isMobile && styles.thumbnailGrid, hoveredProductId === item.id && styles.thumbnailFocused]}
             contentFit="cover"
             cachePolicy="memory-disk"
-            onError={() => item.image && setFailedImageUrls((previous) => new Set(previous).add(item.image))}
+            onError={() => {
+              const failedUrl = item.image;
+              if (!failedUrl) return;
+              setFailedImageUrls((previous) => new Set(previous).add(failedUrl));
+            }}
           />
           {(item.stock ?? 0) < 1 && currentUser?.role !== "admin" && <View style={styles.outOfStockImageShade}><Text style={styles.outOfStockImageText}>หมดแล้ว</Text></View>}
 

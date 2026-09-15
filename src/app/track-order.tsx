@@ -1,6 +1,6 @@
 // หน้าติดตามคำสั่งซื้อ
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
     Pressable,
@@ -41,14 +41,24 @@ const STATUS_STEPS: Array<{ key: OrderStatus; label: string; detail: string; ico
 const statusIndex = (status: OrderStatus) => STATUS_STEPS.findIndex((step) => step.key === status);
 
 export default function TrackOrderScreen() {
+  // รับรหัสออเดอร์จากหน้าประวัติการซื้อ เพื่อเปิดรายละเอียดของรายการที่ผู้ใช้กด
+  const { orderId } = useLocalSearchParams<{ orderId?: string }>();
+  const requestedOrderId = Number(Array.isArray(orderId) ? orderId[0] : orderId);
   const [orders, setOrders] = useState<DemoOrder[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const refresh = () => {
     const nextOrders = getDemoOrders();
     setOrders([...nextOrders]);
-    setSelectedId((current) => current ?? nextOrders[0]?.id ?? null);
+    setSelectedId((current) => {
+      if (current && nextOrders.some((order) => order.id === current)) return current;
+      return nextOrders.find((order) => order.id === requestedOrderId)?.id ?? nextOrders[0]?.id ?? null;
+    });
   };
+
+  useEffect(() => {
+    if (Number.isFinite(requestedOrderId)) setSelectedId(requestedOrderId);
+  }, [requestedOrderId]);
 
   useEffect(() => {
     refresh();
