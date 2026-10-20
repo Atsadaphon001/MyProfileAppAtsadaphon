@@ -1,264 +1,59 @@
-// หน้าเข้าสู่ระบบ
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { PolarBearBackdrop } from "../components/polar-bear-backdrop";
-import { PolarBearMark } from "../components/polar-bear-mark";
+import { ActivityIndicator, Alert, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { API_AUTH_URL } from "../constants/api";
 import { setSession } from "../constants/store";
 
-// [LOGIN COLORS] สีของหน้า Login และ Register
-const COLORS = {
-  primary: "#00a8b1",
-  primaryDark: "#0E7490",
-  background: "#F0FBFF",
-  text: "#0F2A37",
-  muted: "#5B7C89",
-  border: "#DCF2F8",
-  // ธีมน้ำแข็งมีมิติ
-  iceGloss: "rgba(255,255,255,0.85)",
-  iceDeep: "#0E7490",
-};
-
-// [OFFLINE ACCOUNTS] บัญชีที่สมัครไว้ในเครื่องเมื่อ API ใช้งานไม่ได้
-const LOCAL_ACCOUNTS_KEY = "chillcup-local-accounts";
-
 export default function LoginScreen() {
-  // [LOGIN STATE] ข้อมูลฟอร์มและสถานะการส่งข้อมูล
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [email, setEmail] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [registerMode, setRegisterMode] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // [LOGIN ALERT] แสดงข้อความแจ้งเตือน Login/Register
-  const showError = (message: string) => {
-    if (Platform.OS === "web") alert(message);
-    else Alert.alert("เข้าสู่ระบบไม่สำเร็จ", message);
-  };
-
-  // [LOGIN / REGISTER SUBMIT] ตรวจสอบและส่งข้อมูลบัญชี
-  const submitAuth = async () => {
-    if (!username.trim() || !password || (registerMode && (!email.trim() || password !== confirmPassword))) {
-      showError(registerMode ? "กรุณากรอกข้อมูลให้ครบ และตรวจสอบรหัสผ่านอีกครั้ง" : "กรุณากรอก Username และ Password");
+  const login = async (credentials = { username, password }) => {
+    if (!credentials.username.trim() || !credentials.password) {
+      const message = "กรุณากรอก Username และ Password";
+      Platform.OS === "web" ? alert(message) : Alert.alert("ข้อมูลไม่ครบ", message);
       return;
     }
-
     setLoading(true);
     try {
-      // [AUTH API] บัญชีและรหัสผ่านต้องผ่าน Backend เพื่อบันทึกใน MySQL เสมอ
-      const response = await fetch(`${API_AUTH_URL}/${registerMode ? "register" : "login"}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(registerMode
-          ? { username: username.trim(), email: email.trim(), password, name: username.trim() }
-          : { username: username.trim(), password }),
+      const response = await fetch(`${API_AUTH_URL}/login`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: credentials.username.trim(), password: credentials.password }),
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || `เกิดข้อผิดพลาด (${response.status})`);
-      if (registerMode) {
-        setRegisterMode(false);
-        setPassword("");
-        setConfirmPassword("");
-        showError("สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ");
-        return;
-      }
-      if (data.user) setSession(data.user, data.token || "");
-      if (Platform.OS === "web") sessionStorage.setItem("chillcup-web-access", "granted");
-      // เข้าสู่ระบบสำเร็จให้เริ่มที่หน้าแรกของแอปเสมอ
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "เข้าสู่ระบบไม่สำเร็จ");
+      setSession({ id: 1, username: credentials.username.trim(), name: "HR Administrator", role: "admin" }, data.token);
       router.replace("/home");
     } catch (error) {
-      // [OFFLINE LOGIN FALLBACK] Login บัญชีที่สมัครในเครื่องได้เมื่อ API ล่ม
-      if (typeof sessionStorage !== "undefined") {
-        const savedAccounts = JSON.parse(sessionStorage.getItem(LOCAL_ACCOUNTS_KEY) || "[]") as Array<{ username: string; email: string; password: string }>;
-        const cleanUsername = username.trim().toLowerCase();
-        const localAccount = savedAccounts.find((account) => account.username === cleanUsername);
-        if (localAccount && localAccount.password === password) {
-          setSession({ id: Date.now(), username: localAccount.username, name: localAccount.username, email: localAccount.email, role: "user" }, "local-session");
-          sessionStorage.setItem("chillcup-web-access", "granted");
-          // บัญชีในเครื่องก็ต้องเริ่มที่หน้าแรกเช่นเดียวกัน
-          router.replace("/home");
-          return;
-        }
-      }
-      const message = error instanceof Error ? error.message : "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้";
-      showError(
-        message === "Failed to fetch"
-          ? "เชื่อมต่อ Backend ไม่ได้: ตรวจสอบว่า Server กำลังรัน node server.js อยู่ที่พอร์ต 3101"
-          : message
-      );
-    } finally {
-      setLoading(false);
-    }
+      const message = error instanceof Error ? error.message : "เชื่อมต่อ Backend ไม่ได้";
+      Platform.OS === "web" ? alert(message) : Alert.alert("เข้าสู่ระบบไม่สำเร็จ", message);
+    } finally { setLoading(false); }
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* ฉากหลังอยู่ในหน้านี้โดยตรง จึงอยู่หลังฟอร์มและไม่ถูก Stack บนเว็บกลบ */}
-      <PolarBearBackdrop />
-      <StatusBar barStyle="dark-content" />
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View style={styles.logo}>
-          <PolarBearMark size="large" />
-        </View>
-        <Text style={styles.kicker}>{registerMode ? "JOIN CHILLCUP" : "WELCOME BACK"}</Text>
-        <Text style={styles.title}>{registerMode ? "สมัครบัญชีลูกค้า" : "เข้าสู่ระบบ ChillCup"}</Text>
-        <Text style={styles.subtitle}>ขอต้อนรับสู่ ChillCup</Text>
-
-        <View style={styles.form}>
-          {/* [DEMO ACCOUNTS] ปุ่มกรอกบัญชีทดลอง */}
-          {!registerMode && <View style={styles.demoBox}>
-            <Text style={styles.demoTitle}>บัญชีทดลอง</Text>
-            <View style={styles.demoRow}>
-              <Pressable style={styles.demoButton} onPress={() => { setUsername("user"); setPassword("user"); }}><Text style={styles.demoButtonText}>ลูกค้า: user / user</Text></Pressable>
-              <Pressable style={styles.demoButton} onPress={() => { setUsername("admin"); setPassword("admin"); }}><Text style={styles.demoButtonText}>Admin: admin / admin</Text></Pressable>
-            </View>
-          </View>}
-          {/* [USERNAME INPUT] ช่อง Username */}
-          <Text style={styles.label}>Username</Text>
-          <View style={styles.inputWrap}>
-            <Ionicons name="person-outline" size={19} color={COLORS.muted} />
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-              placeholder="กรอกชื่อผู้ใช้"
-              placeholderTextColor="#94A3B8"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          {/* [EMAIL INPUT] ช่อง Email เฉพาะตอนสมัครสมาชิก */}
-          {registerMode && <>
-            <Text style={styles.label}>Email</Text>
-            <View style={styles.inputWrap}><Ionicons name="mail-outline" size={19} color={COLORS.muted} /><TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="อีเมลของคุณ" placeholderTextColor="#94A3B8" keyboardType="email-address" autoCapitalize="none" /></View>
-          </>}
-
-                    {registerMode && (
-            <View style={styles.formRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Password</Text>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="lock-closed-outline" size={19} color={COLORS.muted} />
-                  <TextInput
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="กรอกรหัสผ่าน"
-                    placeholderTextColor="#94A3B8"
-                    secureTextEntry
-                  />
-                </View>
-              </View>
-              <View style={{ width: 12 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>ยืนยัน Password</Text>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="lock-closed-outline" size={19} color={COLORS.muted} />
-                  <TextInput
-                    style={styles.input}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    placeholder="ยืนยันรหัส"
-                    placeholderTextColor="#94A3B8"
-                    secureTextEntry
-                  />
-                </View>
-              </View>
-            </View>
-          )}
-
-          {!registerMode && (
-            <>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrap}>
-                <Ionicons name="lock-closed-outline" size={19} color={COLORS.muted} />
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="กรอกรหัสผ่าน"
-                  placeholderTextColor="#94A3B8"
-                  secureTextEntry
-                />
-              </View>
-            </>
-          )}
-
-          {/* [SUBMIT BUTTON] ปุ่มเข้าสู่ระบบหรือสมัครสมาชิก */}
-          <Pressable
-            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-            onPress={submitAuth}
-            disabled={loading}
-          >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{registerMode ? "สมัครสมาชิก" : "เข้าสู่ระบบ"}</Text>}
-            {!loading && <Ionicons name="arrow-forward" size={20} color="#fff" />}
-          </Pressable>
-
-          {/* [SWITCH AUTH MODE] สลับ Login กับ Register */}
-          <Pressable onPress={() => { setRegisterMode(!registerMode); setPassword(""); setConfirmPassword(""); }} style={styles.switchButton}>
-            <Text style={styles.guestText}>{registerMode ? "มีบัญชีแล้ว? เข้าสู่ระบบ" : "ยังไม่มีบัญชี? สมัครลูกค้าใหม่"}</Text>
-          </Pressable>
-
-          {/* [GUEST ACCESS] เข้าดูสินค้าโดยไม่ Login */}
-          <Pressable
-            onPress={() => {
-              if (Platform.OS === "web") sessionStorage.setItem("chillcup-web-access", "granted");
-              router.replace("/");
-            }}
-            style={styles.guestButton}
-          >
-            <Text style={styles.guestText}>เข้าสู่หน้าสินค้าโดยไม่เข้าสู่ระบบ</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+  return <SafeAreaView style={styles.screen}><View style={styles.card}>
+    <Text style={styles.eyebrow}>ATSADAPHON • HR ANALYTICS</Text>
+    <Text style={styles.title}>HR Manager</Text>
+    <Text style={styles.subtitle}>เข้าสู่ระบบเพื่อจัดการพนักงานและวิเคราะห์เงินเดือน</Text>
+    <Text style={styles.label}>Username</Text>
+    <TextInput value={username} onChangeText={setUsername} placeholder="Username" autoCapitalize="none" autoCorrect={false} style={styles.input} onSubmitEditing={() => void login()} />
+    <Text style={styles.label}>Password</Text>
+    <TextInput value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry style={styles.input} onSubmitEditing={() => void login()} />
+    <Pressable style={styles.button} onPress={() => void login()} disabled={loading}>{loading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>เข้าสู่ระบบ</Text>}</Pressable>
+    <Pressable style={styles.quickAdminButton} onPress={() => void login({ username: "admin", password: "admin" })} disabled={loading}>
+      <Text style={styles.quickAdminText}>{loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ Admin ทันที"}</Text>
+    </Pressable>
+    <Text style={styles.hint}>บัญชี Admin: admin / admin</Text>
+  </View></SafeAreaView>;
 }
 
-// [LOGIN STYLES] รูปแบบหน้าจอ Login/Register
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "rgba(240, 251, 255, 0.9)" }, // โปร่งแสงให้เห็น PolarBearBackdrop
-  content: { flex: 1, width: "100%", maxWidth: 480, alignSelf: "center", justifyContent: "center", padding: 28 },
-  logo: { width: 72, height: 72, borderRadius: 24, backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center", marginBottom: 24, shadowColor: COLORS.primary, shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 5, borderWidth: 3, borderColor: COLORS.iceGloss },
-  kicker: { color: COLORS.primaryDark, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
-  title: { color: COLORS.text, fontSize: 30, fontWeight: "800", marginTop: 8 },
-  subtitle: { color: COLORS.muted, fontSize: 15, lineHeight: 22, marginTop: 8, marginBottom: 28 },
-  form: { backgroundColor: "rgba(255,255,255,0.88)", borderRadius: 20, padding: 20, borderWidth: 2, borderColor: COLORS.iceGloss, shadowColor: "#0E7490", shadowOpacity: 0.16, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 5 }, // กล่องแบบก้อนน้ำแข็งมีมิติ
-  formRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  label: { color: COLORS.text, fontSize: 13, fontWeight: "700", marginBottom: 7, marginTop: 12 },
-  inputWrap: { height: 48, borderWidth: 1, borderColor: COLORS.border, borderRadius: 11, flexDirection: "row", alignItems: "center", paddingHorizontal: 13, backgroundColor: "#FAFEFF" },
-  input: { flex: 1, color: COLORS.text, fontSize: 15, marginLeft: 9 },
-  button: { height: 50, marginTop: 25, borderRadius: 11, backgroundColor: COLORS.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  buttonPressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  guestButton: { alignItems: "center", marginTop: 18, padding: 4 },
-  switchButton: { alignItems: "center", marginTop: 12, padding: 4 },
-  guestText: { color: COLORS.primaryDark, fontSize: 13, fontWeight: "700" },
-  demoBox: { backgroundColor: "#E8FAFC", borderRadius: 11, padding: 10, marginBottom: 10 },
-  demoTitle: { color: COLORS.primaryDark, fontSize: 12, fontWeight: "800", marginBottom: 7 },
-  demoRow: { flexDirection: "row", gap: 7 },
-  demoButton: { flex: 1, borderRadius: 8, backgroundColor: "#fff", paddingVertical: 8, paddingHorizontal: 5, alignItems: "center" },
-  demoButtonText: { color: COLORS.primaryDark, fontSize: 10, fontWeight: "700", textAlign: "center" },
+  screen: { flex: 1, backgroundColor: "#eff6ff", justifyContent: "center", padding: 20 },
+  card: { width: "100%", maxWidth: 440, alignSelf: "center", backgroundColor: "white", padding: 28, borderRadius: 20, borderWidth: 1, borderColor: "#dbeafe", elevation: 3 },
+  eyebrow: { color: "#3974c6", fontWeight: "800", fontSize: 12, letterSpacing: 1.2 }, title: { color: "#142b49", fontWeight: "800", fontSize: 32, marginTop: 12 },
+  subtitle: { color: "#64748b", marginTop: 8, marginBottom: 20, lineHeight: 22 }, label: { color: "#26364b", fontWeight: "700", marginTop: 12, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, height: 48, paddingHorizontal: 13, color: "#142b49", backgroundColor: "#fff" },
+  button: { marginTop: 24, height: 50, borderRadius: 10, backgroundColor: "#3974c6", alignItems: "center", justifyContent: "center" }, buttonText: { color: "white", fontSize: 16, fontWeight: "800" },
+  quickAdminButton: { marginTop: 12, height: 46, borderRadius: 10, borderWidth: 1, borderColor: "#3974c6", alignItems: "center", justifyContent: "center", backgroundColor: "#eff6ff" }, quickAdminText: { color: "#285fa8", fontSize: 14, fontWeight: "800" },
+  hint: { color: "#64748b", textAlign: "center", marginTop: 12, fontSize: 13 },
 });

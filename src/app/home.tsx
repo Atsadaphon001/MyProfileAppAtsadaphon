@@ -1,211 +1,126 @@
-// หน้าแรกและแดชบอร์ด
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { API_AUTH_URL, API_BASE_URL } from "../constants/api";
-import { getCartCount, getDemoOrders, getLocalProductCatalog, getProductStock, getSession } from "../constants/store";
+import { ActivityIndicator, Alert, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { API_AUTH_URL } from "../constants/api";
+import { clearSession, getSession } from "../constants/store";
 
-// [HOME DASHBOARD] หน้าแรกและสรุปข้อมูลร้านค้า
-const COLORS = { primary: "#00a8b1", primaryDark: "#0E7490", background: "rgba(240, 251, 255, 0.9)", text: "#0F2A37", muted: "#5B7C89", border: "#DCF2F8" };
-// ใช้เกณฑ์เดียวกับหน้าสินค้า: 0 = หมด, 1–5 = ใกล้หมด
-const LOW_STOCK_LIMIT = 5;
+type Employee = { id: string; name: string; position: string; status: "Active" | "On Leave"; salary: number };
+type Cluster = { group: string; centroid: number; count: number };
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getSession()?.token;
+  const response = await fetch(`${API_AUTH_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers } });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.message || `Request failed (${response.status})`);
+  return body as T;
+}
 
 export default function HomeScreen() {
-  // [DASHBOARD STATE] จำนวนสินค้า ออเดอร์ สต็อก และรายได้
-  const isAdmin = getSession()?.user.role === "admin";
-  const [productCount, setProductCount] = useState(0);
-  const [lowStockCount, setLowStockCount] = useState(0);
-  const [lowStockProducts, setLowStockProducts] = useState<{ name: string; stock: number }[]>([]);
-  const [orderCount, setOrderCount] = useState(0);
-  const [revenue, setRevenue] = useState(0);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [name, setName] = useState("");
+  const [position, setPosition] = useState("");
+  const [salary, setSalary] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPosition, setEditPosition] = useState("");
+  const [editSalary, setEditSalary] = useState("");
+  const [clusters, setClusters] = useState<Cluster[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [error, setError] = useState("");
 
-  type DashboardProduct = { id: number; product_name: string; stock: number };
-  type DashboardOrder = { total: number };
-
-  const applyProductMetrics = useCallback((products: DashboardProduct[]) => {
-    setProductCount(products.length);
-    const lowStock = products
-      .map((product) => ({ ...product, stock: getProductStock(product.id, Number(product.stock) || 0) }))
-      .filter((product) => product.stock <= LOW_STOCK_LIMIT)
-      .map((product) => ({ name: product.product_name, stock: product.stock }))
-      .sort((first, second) => first.stock - second.stock);
-    setLowStockCount(lowStock.length);
-    setLowStockProducts(lowStock);
+  const loadEmployees = useCallback(async () => {
+    try { setEmployees(await request<Employee[]>("/employees")); setError(""); }
+    catch (err) { setError(err instanceof Error ? err.message : "โหลดข้อมูลไม่สำเร็จ"); }
+    finally { setLoading(false); }
   }, []);
+  useEffect(() => {
+    void loadEmployees();
+    // Keep the dashboard in sync with edits made directly in phpMyAdmin.
+    const refreshTimer = setInterval(() => { void loadEmployees(); }, 5000);
+    return () => clearInterval(refreshTimer);
+  }, [loadEmployees]);
 
-  const applyOrderMetrics = useCallback((orders: DashboardOrder[]) => {
-    setOrderCount(orders.length);
-    setRevenue(orders.reduce((sum, order) => sum + Number(order.total || 0), 0));
-  }, []);
-
-  const loadDashboard = useCallback(async () => {
-    const session = getSession();
-    const localProducts = getLocalProductCatalog<DashboardProduct>() || [];
-    const localOrders = getDemoOrders();
-
-    // โหมดทดลองและกรณี API ใช้งานไม่ได้: ใช้ข้อมูลที่ผู้ดูแลแก้ไขล่าสุดในเครื่อง
-    if (session?.token === "demo-session") {
-      applyProductMetrics(localProducts);
-      applyOrderMetrics(localOrders);
+  const addEmployee = async () => {
+    const parsedSalary = Number(salary);
+    if (!name.trim() || !position.trim() || !salary.trim() || !Number.isFinite(parsedSalary) || parsedSalary < 0) {
+      const message = "กรุณากรอกชื่อ ตำแหน่ง และเงินเดือนตั้งแต่ 0 ขึ้นไป";
+      Platform.OS === "web" ? alert(message) : Alert.alert("ข้อมูลไม่ถูกต้อง", message);
       return;
     }
-
     try {
-      const productRequest = fetch(API_BASE_URL);
-      const orderRequest = fetch(`${API_AUTH_URL}/orders`, {
-        headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {},
-      });
-      const [productResponse, orderResponse] = await Promise.all([productRequest, orderRequest]);
-      const products = productResponse.ok ? await productResponse.json() : null;
-      const orders = orderResponse.ok ? await orderResponse.json() : null;
+      const employee = await request<Employee>("/employees", { method: "POST", body: JSON.stringify({ name, position, salary: parsedSalary }) });
+      setEmployees((current) => [...current, employee]); setName(""); setPosition(""); setSalary(""); setClusters(null);
+    } catch (err) { showMessage(err instanceof Error ? err.message : "เพิ่มพนักงานไม่สำเร็จ"); }
+  };
 
-      if (Array.isArray(products)) applyProductMetrics(products);
-      else applyProductMetrics(localProducts);
-      if (Array.isArray(orders)) applyOrderMetrics(orders);
-      else applyOrderMetrics(localOrders);
-    } catch {
-      applyProductMetrics(localProducts);
-      applyOrderMetrics(localOrders);
+  const toggleStatus = async (employee: Employee) => {
+    try {
+      const updated = await request<Employee>(`/employees/${encodeURIComponent(employee.id)}/status`, { method: "PUT" });
+      setEmployees((current) => current.map((item) => item.id === updated.id ? updated : item)); setClusters(null);
+    } catch (err) { showMessage(err instanceof Error ? err.message : "เปลี่ยนสถานะไม่สำเร็จ"); }
+  };
+
+  const beginEdit = (employee: Employee) => {
+    setEditingId(employee.id);
+    setEditName(employee.name);
+    setEditPosition(employee.position);
+    setEditSalary(String(employee.salary));
+  };
+
+  const saveEdit = async (id: string) => {
+    const parsedSalary = Number(editSalary);
+    if (!editName.trim() || !editPosition.trim() || !editSalary.trim() || !Number.isFinite(parsedSalary) || parsedSalary < 0) {
+      showMessage("กรุณากรอกชื่อ ตำแหน่ง และเงินเดือนตั้งแต่ 0 ขึ้นไป");
+      return;
     }
-  }, [applyOrderMetrics, applyProductMetrics]);
+    try {
+      const updated = await request<Employee>(`/employees/${encodeURIComponent(id)}`, {
+        method: "PUT", body: JSON.stringify({ name: editName, position: editPosition, salary: parsedSalary }),
+      });
+      setEmployees((current) => current.map((item) => item.id === id ? updated : item));
+      setEditingId(null);
+      setClusters(null);
+    } catch (err) { showMessage(err instanceof Error ? err.message : "แก้ไขพนักงานไม่สำเร็จ"); }
+  };
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    void loadDashboard();
-  }, [isAdmin, loadDashboard]);
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <View style={styles.heroIcon}><Ionicons name="snow" size={27} color="#fff" /></View>
-          <Text style={styles.kicker}>{isAdmin ? "CHILLCUP DASHBOARD" : "WELCOME TO CHILLCUP"}</Text>
-          <Text style={styles.title}>{isAdmin ? "สวัสดี 👋" : "สวัสดี นักช้อป 👋"}</Text>
-          <Text style={styles.subtitle}>{isAdmin ? "พร้อมดูแลสินค้าให้สดชื่นและเป็นระเบียบแล้วหรือยัง?" : "ค้นหาแก้วใบโปรดสำหรับทุกช่วงเวลาของคุณ"}</Text>
-          <View style={styles.heroFooter}><View style={styles.liveDot} /><Text style={styles.liveText}>{isAdmin ? "ระบบร้านค้าพร้อมใช้งาน" : "สินค้าใหม่พร้อมให้เลือก"}</Text><Text style={styles.dateText}>{isAdmin ? "TODAY" : "SHOP NOW"}</Text></View>
-        </View>
-        {isAdmin ? <>
-        <View style={styles.sectionHeading}><View><Text style={styles.sectionEyebrow}>OVERVIEW</Text><Text style={styles.sectionTitle}>ภาพรวมร้านค้า</Text></View><View style={styles.headingActions}><TouchableOpacity style={styles.refreshPill} onPress={() => void loadDashboard()}><Ionicons name="refresh" size={15} color={COLORS.primaryDark} /><Text style={styles.refreshText}>รีเฟรช</Text></TouchableOpacity><TouchableOpacity style={styles.refreshPill} onPress={() => router.replace("/")}><Ionicons name="arrow-forward" size={15} color={COLORS.primaryDark} /><Text style={styles.refreshText}>ดูร้านค้า</Text></TouchableOpacity></View></View>
-        <View style={styles.statsGrid}>
-          <StatCard icon="inventory-2" label="สินค้าทั้งหมด" value={productCount} color={COLORS.primary} />
-          <StatCard icon="receipt-outline" label="คำสั่งซื้อ" value={orderCount} color="#F59E0B" />
-          <StatCard icon="trending-down" label="สต็อกใกล้หมด" value={lowStockCount} color="#EF476F" />
-          <StatCard icon="cash-outline" label="ยอดขายสะสม" value={`฿${revenue.toLocaleString()}`} color="#7C5CFC" />
-        </View>
-        <View style={styles.sectionHeading}><View><Text style={styles.sectionEyebrow}>WORKSPACE</Text><Text style={styles.sectionTitle}>จัดการร้านค้า</Text></View></View>
-        <View style={styles.grid}>
-          <TouchableOpacity style={styles.actionCard} onPress={() => router.replace("/")} activeOpacity={0.8}><View style={[styles.actionIcon, { backgroundColor: "#DDF8FA" }]}><MaterialIcons name="inventory-2" size={25} color={COLORS.primary} /></View><Text style={styles.cardTitle}>สินค้าทั้งหมด</Text><Text style={styles.cardText}>ดู แก้ไข และลบรายการสินค้า</Text><Ionicons name="arrow-forward" size={18} color={COLORS.primary} style={styles.cardArrow} /></TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard} onPress={() => router.replace("/categories")} activeOpacity={0.8}><View style={[styles.actionIcon, { backgroundColor: "#FFF2D8" }]}><Ionicons name="folder-open-outline" size={25} color="#F59E0B" /></View><Text style={styles.cardTitle}>หมวดหมู่</Text><Text style={styles.cardText}>เลือกดูสินค้าตามหมวดหมู่</Text><Ionicons name="arrow-forward" size={18} color="#F59E0B" style={styles.cardArrow} /></TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard} onPress={() => router.push("/price-analysis")} activeOpacity={0.8}><View style={[styles.actionIcon, { backgroundColor: "#EDE8FF" }]}><Ionicons name="analytics-outline" size={25} color="#7C5CFC" /></View><Text style={styles.cardTitle}>วิเคราะห์ราคา AI/ML</Text><Text style={styles.cardText}>ดูการจัดกลุ่มราคา Low / Mid / High</Text><Ionicons name="arrow-forward" size={18} color="#7C5CFC" style={styles.cardArrow} /></TouchableOpacity>
-        </View>
-        <View style={styles.quickRow}>
-          {isAdmin && <TouchableOpacity style={styles.primaryAction} onPress={() => router.push("/add")} activeOpacity={0.8}><Ionicons name="add-circle-outline" size={22} color="#fff" /><Text style={styles.primaryActionText}>เพิ่มสินค้าใหม่</Text></TouchableOpacity>}
-          <TouchableOpacity style={isAdmin ? styles.secondaryAction : styles.primaryAction} onPress={() => router.push("/admin-orders")} activeOpacity={0.8}><Ionicons name="receipt-outline" size={21} color={isAdmin ? COLORS.primaryDark : "#fff"} /><Text style={isAdmin ? styles.secondaryActionText : styles.primaryActionText}>ตรวจออเดอร์</Text></TouchableOpacity>
-        </View>
-        <View style={styles.alertPanel}><View style={styles.alertIcon}><Ionicons name="notifications-outline" size={21} color="#EF476F" /></View><View style={styles.alertCopy}><Text style={styles.alertTitle}>{lowStockCount > 0 ? `มีสินค้า ${lowStockCount} รายการต้องตรวจสอบสต็อก` : "สต็อกสินค้าพร้อมจำหน่าย"}</Text><Text style={styles.alertText}>{lowStockCount > 0 ? `สินค้าเหลือไม่เกิน ${LOW_STOCK_LIMIT} ชิ้น รวมสินค้าที่หมดแล้ว` : "ตรวจสอบสินค้าและอัปเดตข้อมูลได้จากหน้าสินค้า"}</Text></View><Ionicons name="chevron-forward" size={18} color={COLORS.muted} /></View>
-        {lowStockProducts.length > 0 && <View style={styles.lowStockPanel}><View style={styles.lowStockHeader}><View><Text style={styles.sectionEyebrow}>STOCK ALERT</Text><Text style={styles.lowStockTitle}>สินค้าใกล้หมด / หมดแล้ว</Text></View><TouchableOpacity onPress={() => router.replace("/")}><Text style={styles.viewAllText}>ดูทั้งหมด</Text></TouchableOpacity></View>{lowStockProducts.slice(0, 5).map((product) => <View style={styles.lowStockRow} key={product.name}><View style={styles.lowStockProductIcon}><Ionicons name={product.stock === 0 ? "close-circle-outline" : "warning-outline"} size={17} color="#EF476F" /></View><Text style={styles.lowStockName} numberOfLines={1}>{product.name}</Text><View style={styles.stockCount}><Text style={styles.stockCountText}>{product.stock === 0 ? "หมดแล้ว" : product.stock}</Text><Text style={styles.stockUnit}>{product.stock === 0 ? "" : "ชิ้น"}</Text></View></View>)}</View>}
-        </> : <CustomerHomeContent />}
-      </ScrollView>
-      <View style={styles.bottomNav}>
-        <NavItem icon="home" label="หน้าแรก" active onPress={() => router.replace("/home")} />
-        {isAdmin && <NavItem icon="add" label="เพิ่ม" onPress={() => router.push("/add")} />}
-        <NavItem icon="inventory" label="สินค้า" onPress={() => router.replace("/")} material />
-        <NavItem icon="folder-outline" label="หมวดหมู่" onPress={() => router.replace("/categories")} />
-      </View>
-    </SafeAreaView>
-  );
-}
+  const deleteEmployee = async (employee: Employee) => {
+    const confirmed = Platform.OS === "web" ? window.confirm("Are you sure?") : await new Promise<boolean>((resolve) => Alert.alert("ยืนยันการลบ", "Are you sure?", [{ text: "ยกเลิก", style: "cancel", onPress: () => resolve(false) }, { text: "ลบ", style: "destructive", onPress: () => resolve(true) }]));
+    if (!confirmed) return;
+    try {
+      await request(`/employees/${encodeURIComponent(employee.id)}`, { method: "DELETE" });
+      setEmployees((current) => current.filter((item) => item.id !== employee.id)); setClusters(null);
+    } catch (err) { showMessage(err instanceof Error ? err.message : "ลบพนักงานไม่สำเร็จ"); }
+  };
 
-function StatCard({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) {
-  return <View style={styles.statCard}><View style={[styles.statIcon, { backgroundColor: `${color}18` }]}><Ionicons name={icon as never} size={20} color={color} /></View><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>;
-}
+  const analyze = async () => {
+    setAnalyzing(true);
+    try { const result = await request<{ success: boolean; clusters: Cluster[] }>("/employees/salary-clusters"); setClusters(result.clusters); }
+    catch (err) { showMessage(err instanceof Error ? err.message : "วิเคราะห์เงินเดือนไม่สำเร็จ"); }
+    finally { setAnalyzing(false); }
+  };
 
-function CustomerHomeContent() {
-  const cartCount = getCartCount();
-  const orderCount = getDemoOrders().length;
+  const logout = () => { clearSession(); router.replace("/login"); };
 
-  return <>
-    <View style={styles.customerGreeting}><View style={styles.customerGreetingIcon}><Ionicons name="sparkles-outline" size={24} color="#fff" /></View><View style={styles.customerGreetingCopy}><Text style={styles.sectionEyebrow}>YOUR CHILLCUP</Text><Text style={styles.customerGreetingTitle}>พร้อมเติมความสดชื่นหรือยัง?</Text><Text style={styles.customerGreetingText}>เลือกแก้วใบโปรด แล้วให้เราดูแลเครื่องดื่มของคุณ</Text></View></View>
-    <View style={styles.customerStats}><View style={styles.customerStat}><Text style={styles.customerStatValue}>{cartCount}</Text><Text style={styles.customerStatLabel}>สินค้าในตะกร้า</Text></View><View style={styles.customerStat}><Text style={styles.customerStatValue}>{orderCount}</Text><Text style={styles.customerStatLabel}>คำสั่งซื้อของฉัน</Text></View></View>
-    <View style={styles.sectionHeading}><View><Text style={styles.sectionEyebrow}>QUICK ACCESS</Text><Text style={styles.sectionTitle}>จัดการการสั่งซื้อ</Text></View></View>
-    <View style={styles.customerActionGrid}>
-      <TouchableOpacity style={styles.customerAction} onPress={() => router.replace("/")}><View style={[styles.actionIcon, { backgroundColor: "#DDF8FA" }]}><Ionicons name="bag-handle-outline" size={25} color={COLORS.primary} /></View><Text style={styles.cardTitle}>เลือกซื้อสินค้า</Text><Text style={styles.cardText}>ค้นหาแก้วและอุปกรณ์ที่ชอบ</Text><Ionicons name="arrow-forward" size={18} color={COLORS.primary} style={styles.cardArrow} /></TouchableOpacity>
-      <TouchableOpacity style={styles.customerAction} onPress={() => router.push("/cart")}><View style={[styles.actionIcon, { backgroundColor: "#FFF2D8" }]}><Ionicons name="cart-outline" size={25} color="#F59E0B" /></View><Text style={styles.cardTitle}>ตะกร้าสินค้า</Text><Text style={styles.cardText}>{cartCount > 0 ? `มีสินค้า ${cartCount} ชิ้นรอชำระเงิน` : "ยังไม่มีสินค้าในตะกร้า"}</Text><Ionicons name="arrow-forward" size={18} color="#F59E0B" style={styles.cardArrow} /></TouchableOpacity>
-      <TouchableOpacity style={styles.customerAction} onPress={() => router.push("/track-order")}><View style={[styles.actionIcon, { backgroundColor: "#EDE8FF" }]}><Ionicons name="navigate-circle-outline" size={25} color="#7C5CFC" /></View><Text style={styles.cardTitle}>ติดตามคำสั่งซื้อ</Text><Text style={styles.cardText}>ตรวจสอบสถานะการจัดส่ง</Text><Ionicons name="arrow-forward" size={18} color="#7C5CFC" style={styles.cardArrow} /></TouchableOpacity>
-      <TouchableOpacity style={styles.customerAction} onPress={() => router.push("/purchase-history")}><View style={[styles.actionIcon, { backgroundColor: "#FFE8EF" }]}><Ionicons name="time-outline" size={25} color="#EF476F" /></View><Text style={styles.cardTitle}>ประวัติการซื้อ</Text><Text style={styles.cardText}>ดูรายการสั่งซื้อที่ผ่านมา</Text><Ionicons name="arrow-forward" size={18} color="#EF476F" style={styles.cardArrow} /></TouchableOpacity>
+  return <SafeAreaView style={styles.screen}><ScrollView contentContainerStyle={styles.content}>
+    <View style={styles.header}><View><Text style={styles.eyebrow}>ATSADAPHON • HR ANALYTICS</Text><Text style={styles.title}>Employee Dashboard</Text><Text style={styles.subtitle}>จัดการข้อมูลพนักงานและวิเคราะห์โครงสร้างเงินเดือน</Text></View><Pressable onPress={logout} style={styles.logout}><Text style={styles.logoutText}>ออกจากระบบ</Text></Pressable></View>
+    <View style={styles.summary}><View style={styles.summaryCard}><Text style={styles.summaryLabel}>พนักงานทั้งหมด</Text><Text style={styles.summaryValue}>{employees.length}</Text></View><View style={styles.summaryCard}><Text style={styles.summaryLabel}>เงินเดือนเฉลี่ย</Text><Text style={styles.summaryValue}>{employees.length ? Math.round(employees.reduce((sum, item) => sum + Number(item.salary), 0) / employees.length).toLocaleString() : 0}</Text></View></View>
+    <View style={styles.panel}><Text style={styles.sectionTitle}>เพิ่มพนักงาน</Text><View style={styles.form}><TextInput value={name} onChangeText={setName} placeholder="ชื่อพนักงาน" style={styles.input} /><TextInput value={position} onChangeText={setPosition} placeholder="ตำแหน่ง" style={styles.input} /><TextInput value={salary} onChangeText={setSalary} placeholder="เงินเดือน" keyboardType="decimal-pad" style={styles.input} /><Pressable style={styles.primaryButton} onPress={addEmployee}><Text style={styles.primaryButtonText}>+ เพิ่มพนักงาน</Text></Pressable></View></View>
+    <View style={styles.panel}><View style={styles.sectionRow}><Text style={styles.sectionTitle}>รายชื่อพนักงาน</Text><Pressable style={styles.outlineButton} onPress={loadEmployees}><Text style={styles.outlineText}>รีเฟรช</Text></Pressable></View>
+      {loading ? <ActivityIndicator color="#3974c6" style={{ padding: 22 }} /> : error ? <Text style={styles.error}>{error}</Text> : employees.length === 0 ? <Text style={styles.empty}>ยังไม่มีข้อมูลพนักงาน</Text> : employees.map((employee) => <View key={employee.id} style={styles.employeeRow}><View style={styles.employeeInfo}>{editingId === employee.id ? <View style={styles.editForm}><TextInput value={editName} onChangeText={setEditName} placeholder="ชื่อพนักงาน" style={styles.editInput} /><TextInput value={editPosition} onChangeText={setEditPosition} placeholder="ตำแหน่ง" style={styles.editInput} /><TextInput value={editSalary} onChangeText={setEditSalary} placeholder="เงินเดือน" keyboardType="decimal-pad" style={styles.editInput} /><View style={styles.editActions}><Pressable onPress={() => void saveEdit(employee.id)} style={styles.smallButton}><Text style={styles.smallText}>บันทึก</Text></Pressable><Pressable onPress={() => setEditingId(null)} style={styles.outlineButton}><Text style={styles.outlineText}>ยกเลิก</Text></Pressable></View></View> : <><Text style={styles.employeeName}>{employee.name}</Text><Text style={styles.muted}>{employee.position}</Text><Text style={styles.salary}>฿{Number(employee.salary).toLocaleString()} / เดือน</Text></>}</View><View style={styles.actions}><Text style={[styles.status, employee.status === "Active" ? styles.active : styles.leave]}>{employee.status}</Text><Pressable onPress={() => beginEdit(employee)} style={styles.smallButton}><Text style={styles.smallText}>แก้ไข</Text></Pressable><Pressable onPress={() => void toggleStatus(employee)} style={styles.smallButton}><Text style={styles.smallText}>สลับสถานะ</Text></Pressable><Pressable onPress={() => void deleteEmployee(employee)} style={styles.deleteButton}><Text style={styles.deleteText}>ลบ</Text></Pressable></View></View>)}
     </View>
-    <TouchableOpacity style={styles.customerPrimaryAction} onPress={() => router.replace("/")}><Ionicons name="search-outline" size={21} color="#fff" /><Text style={styles.primaryActionText}>เริ่มเลือกซื้อสินค้า</Text></TouchableOpacity>
-  </>;
+    <View style={styles.panel}><View style={styles.sectionRow}><View style={{ flex: 1 }}><Text style={styles.sectionTitle}>Salary Structure</Text><Text style={styles.muted}>จัดกลุ่มเงินเดือนด้วย 1D K-Means (k=3)</Text></View><Pressable style={[styles.primaryButton, analyzing && { opacity: 0.7 }]} onPress={() => void analyze()} disabled={analyzing}>{analyzing ? <ActivityIndicator color="white" /> : <Text style={styles.primaryButtonText}>วิเคราะห์เงินเดือน</Text>}</Pressable></View>
+      {clusters && <View style={styles.clusterGrid}>{clusters.map((cluster) => <View key={cluster.group} style={styles.clusterCard}><Text style={styles.clusterName}>{cluster.group}</Text><Text style={styles.clusterValue}>฿{cluster.centroid.toLocaleString()}</Text><Text style={styles.muted}>{cluster.count} คน · เงินเดือนเฉลี่ย</Text></View>)}</View>}
+    </View>
+  </ScrollView></SafeAreaView>;
 }
 
-function NavItem({ icon, label, active, material, onPress }: { icon: string; label: string; active?: boolean; material?: boolean; onPress: () => void }) {
-  return <TouchableOpacity style={styles.navItem} onPress={onPress} activeOpacity={0.7}>{material ? <MaterialIcons name={icon as never} size={22} color={active ? COLORS.primary : COLORS.muted} /> : <Ionicons name={icon as never} size={22} color={active ? COLORS.primary : COLORS.muted} />}<Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text></TouchableOpacity>;
-}
+function showMessage(message: string) { Platform.OS === "web" ? alert(message) : Alert.alert("เกิดข้อผิดพลาด", message); }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background }, // โปร่งแสงให้เห็นหมี PolarBearBackdrop
-  content: { padding: 20, paddingBottom: 34 },
-  hero: { backgroundColor: "rgba(221, 248, 250, 0.92)", borderRadius: 26, padding: 25, minHeight: 214, justifyContent: "flex-end", overflow: "hidden", borderWidth: 2, borderColor: "rgba(255,255,255,0.9)", shadowColor: "#0E7490", shadowOpacity: 0.14, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
-  heroIcon: { position: "absolute", top: 22, right: 22, width: 54, height: 54, borderRadius: 18, backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.8)" },
-  kicker: { color: COLORS.primaryDark, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
-  title: { color: COLORS.text, fontSize: 30, fontWeight: "800", marginTop: 8 },
-  subtitle: { color: COLORS.muted, fontSize: 14, lineHeight: 21, marginTop: 6, maxWidth: 290 },
-  heroFooter: { flexDirection: "row", alignItems: "center", marginTop: 22, gap: 7 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" },
-  liveText: { color: COLORS.primaryDark, fontSize: 11, fontWeight: "700" },
-  dateText: { color: COLORS.muted, fontSize: 10, fontWeight: "800", marginLeft: 8, letterSpacing: 1 },
-  sectionHeading: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 25, marginBottom: 12 },
-  sectionEyebrow: { color: COLORS.primary, fontSize: 10, fontWeight: "900", letterSpacing: 1.3 },
-  sectionTitle: { color: COLORS.text, fontSize: 20, fontWeight: "900", marginTop: 3 },
-  headingActions: { flexDirection: "row", gap: 7 },
-  refreshPill: { flexDirection: "row", gap: 5, alignItems: "center", paddingHorizontal: 11, paddingVertical: 7, borderRadius: 9, backgroundColor: "#E5F8FA" },
-  refreshText: { color: COLORS.primaryDark, fontSize: 11, fontWeight: "800" },
-  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  statCard: { width: "48.5%", backgroundColor: "#fff", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: COLORS.border, minHeight: 116 },
-  statIcon: { width: 36, height: 36, borderRadius: 11, justifyContent: "center", alignItems: "center" },
-  statValue: { color: COLORS.text, fontSize: 21, fontWeight: "900", marginTop: 10 },
-  statLabel: { color: COLORS.muted, fontSize: 11, marginTop: 3, fontWeight: "700" },
-  grid: { flexDirection: "row", gap: 12 },
-  actionCard: { flex: 1, backgroundColor: "#fff", borderRadius: 18, padding: 16, minHeight: 158, borderWidth: 1, borderColor: COLORS.border, position: "relative" },
-  actionIcon: { width: 46, height: 46, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  cardTitle: { color: COLORS.text, fontSize: 15, fontWeight: "800", marginTop: 14 },
-  cardText: { color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
-  cardArrow: { position: "absolute", right: 15, bottom: 17 },
-  quickRow: { flexDirection: "row", gap: 10, marginTop: 14 },
-  primaryAction: { flex: 1, height: 52, borderRadius: 13, backgroundColor: COLORS.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
-  primaryActionText: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  secondaryAction: { flex: 1, height: 52, borderRadius: 13, backgroundColor: "#E5F8FA", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  secondaryActionText: { color: COLORS.primaryDark, fontSize: 14, fontWeight: "800" },
-  alertPanel: { flexDirection: "row", alignItems: "center", gap: 11, backgroundColor: "#FFF8F1", borderWidth: 1, borderColor: "#FFE0C2", borderRadius: 16, padding: 14, marginTop: 16 },
-  alertIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "#FFE8D5", justifyContent: "center", alignItems: "center" },
-  alertCopy: { flex: 1 },
-  alertTitle: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
-  alertText: { color: COLORS.muted, fontSize: 11, marginTop: 3, lineHeight: 16 },
-  customerGreeting: { flexDirection: "row", alignItems: "center", gap: 13, backgroundColor: "#FFFFFF", borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, padding: 17, marginTop: 25 },
-  customerGreetingIcon: { width: 48, height: 48, borderRadius: 15, backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center" },
-  customerGreetingCopy: { flex: 1 },
-  customerGreetingTitle: { color: COLORS.text, fontSize: 17, fontWeight: "900", marginTop: 4 },
-  customerGreetingText: { color: COLORS.muted, fontSize: 11, lineHeight: 17, marginTop: 3 },
-  customerStats: { flexDirection: "row", gap: 10, marginTop: 12 },
-  customerStat: { flex: 1, backgroundColor: "#E5F8FA", borderRadius: 15, padding: 14, borderWidth: 1, borderColor: "#C6EEF1" },
-  customerStatValue: { color: COLORS.primaryDark, fontSize: 24, fontWeight: "900" },
-  customerStatLabel: { color: COLORS.muted, fontSize: 11, marginTop: 3, fontWeight: "700" },
-  customerActionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  customerAction: { width: "48.5%", backgroundColor: "#FFFFFF", borderRadius: 17, borderWidth: 1, borderColor: COLORS.border, padding: 14, minHeight: 148, position: "relative" },
-  customerPrimaryAction: { height: 52, borderRadius: 13, backgroundColor: COLORS.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, marginTop: 15 },
-  lowStockPanel: { backgroundColor: "#fff", borderRadius: 18, borderWidth: 1, borderColor: "#FFD8D5", padding: 15, marginTop: 14 },
-  lowStockHeader: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 6 },
-  lowStockTitle: { color: COLORS.text, fontSize: 17, fontWeight: "900", marginTop: 3 },
-  viewAllText: { color: COLORS.primaryDark, fontSize: 11, fontWeight: "800" },
-  lowStockRow: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#F2F6F8" },
-  lowStockProductIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: "#FFF0EF", justifyContent: "center", alignItems: "center" },
-  lowStockName: { flex: 1, color: COLORS.text, fontSize: 12, fontWeight: "700" },
-  stockCount: { minWidth: 48, alignItems: "flex-end" },
-  stockCountText: { color: "#EF476F", fontSize: 16, fontWeight: "900" },
-  stockUnit: { color: COLORS.muted, fontSize: 10 },
-  bottomNav: { flexDirection: "row", backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: COLORS.border, paddingVertical: 8 },
-  navItem: { flex: 1, alignItems: "center" },
-  navText: { color: COLORS.muted, fontSize: 11, marginTop: 3 },
-  navTextActive: { color: COLORS.primary, fontWeight: "800" },
+  screen: { flex: 1, backgroundColor: "#f1f5f9" }, content: { width: "100%", maxWidth: 1080, alignSelf: "center", padding: 22, gap: 16 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 4 }, eyebrow: { color: "#3974c6", fontWeight: "800", fontSize: 11, letterSpacing: 1 }, title: { color: "#142b49", fontSize: 28, fontWeight: "800", marginTop: 5 }, subtitle: { color: "#64748b", marginTop: 5 }, logout: { paddingVertical: 9, paddingHorizontal: 13, borderColor: "#cbd5e1", borderWidth: 1, borderRadius: 9 }, logoutText: { color: "#334155", fontWeight: "700" },
+  summary: { flexDirection: "row", gap: 12 }, summaryCard: { flex: 1, backgroundColor: "white", padding: 18, borderRadius: 14, borderColor: "#e2e8f0", borderWidth: 1 }, summaryLabel: { color: "#64748b", fontWeight: "600" }, summaryValue: { color: "#142b49", fontWeight: "800", fontSize: 25, marginTop: 7 },
+  panel: { backgroundColor: "white", padding: 18, borderRadius: 14, borderColor: "#e2e8f0", borderWidth: 1 }, sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }, sectionTitle: { color: "#142b49", fontSize: 18, fontWeight: "800" }, form: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 12 }, input: { flexGrow: 1, flexBasis: 180, height: 44, paddingHorizontal: 12, borderRadius: 9, borderWidth: 1, borderColor: "#cbd5e1", color: "#142b49" }, primaryButton: { minHeight: 42, justifyContent: "center", alignItems: "center", backgroundColor: "#3974c6", paddingHorizontal: 15, borderRadius: 9 }, primaryButtonText: { color: "white", fontWeight: "800" }, outlineButton: { borderColor: "#cbd5e1", borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 }, outlineText: { color: "#334155", fontWeight: "700" },
+  employeeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: "#edf2f7" }, employeeInfo: { flex: 1 }, employeeName: { color: "#142b49", fontWeight: "800", fontSize: 15 }, muted: { color: "#64748b", fontSize: 13, marginTop: 3 }, salary: { color: "#3974c6", fontWeight: "700", marginTop: 5 }, actions: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: 7 }, editForm: { gap: 7 }, editInput: { height: 38, minWidth: 180, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: "#cbd5e1", color: "#142b49" }, editActions: { flexDirection: "row", gap: 8 }, status: { fontSize: 11, fontWeight: "800", paddingVertical: 5, paddingHorizontal: 8, borderRadius: 20, overflow: "hidden" }, active: { color: "#166534", backgroundColor: "#dcfce7" }, leave: { color: "#92400e", backgroundColor: "#fef3c7" }, smallButton: { padding: 7, backgroundColor: "#eff6ff", borderRadius: 7 }, smallText: { color: "#285fa8", fontSize: 12, fontWeight: "700" }, deleteButton: { paddingVertical: 7, paddingHorizontal: 9, backgroundColor: "#fef2f2", borderRadius: 7 }, deleteText: { color: "#b91c1c", fontSize: 12, fontWeight: "700" }, empty: { color: "#64748b", paddingVertical: 20, textAlign: "center" }, error: { color: "#b91c1c", paddingVertical: 16 }, clusterGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 }, clusterCard: { flexGrow: 1, flexBasis: 180, backgroundColor: "#eff6ff", borderColor: "#dbeafe", borderWidth: 1, borderRadius: 11, padding: 15 }, clusterName: { color: "#285fa8", fontWeight: "800" }, clusterValue: { color: "#142b49", fontWeight: "800", fontSize: 22, marginTop: 7 },
 });
